@@ -106,7 +106,8 @@ export class Parser {
     }
 
     skipNewlines(allowIndent = false) {
-        while (this.match(TokenType.NEWLINE)) {
+        // while (this.match(TokenType.NEWLINE)) {
+        while (this.match(TokenType.NEWLINE) || this.match(TokenType.COMMENT)) {
             this.advance();
         }
         if (allowIndent && this.match(TokenType.INDENT)) {
@@ -768,6 +769,9 @@ export class Parser {
 
         const consequent = this.parseBlock();
         let alternate = null;
+
+        // Skip newlines/comments between block end and potential 'else'
+        this.skipNewlines();
 
         if (this.match(TokenType.KEYWORD, 'else')) {
             this.advance();

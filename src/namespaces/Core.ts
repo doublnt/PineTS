@@ -43,6 +43,26 @@ const INDICATOR_ARGS_TYPES = {
     behind_chart: 'boolean',
 };
 
+const COLOR_CONSTANTS = {
+    aqua: '#00BCD4',
+    black: '#363A45',
+    blue: '#2196F3',
+    fuchsia: '#E040FB',
+    gray: '#787B86',
+    green: '#4CAF50',
+    lime: '#00E676',
+    maroon: '#880E4F',
+    navy: '#311B92',
+    olive: '#808000',
+    orange: '#FF9800',
+    purple: '#9C27B0',
+    red: '#F23645',
+    silver: '#B2B5BE',
+    teal: '#089981',
+    white: '#FFFFFF',
+    yellow: '#FDD835',
+} as const;
+
 export function parseIndicatorOptions(args: any[]): Partial<IndicatorOptions> {
     return parseArgsForPineParams<Partial<IndicatorOptions>>(args, INDICATOR_SIGNATURE, INDICATOR_ARGS_TYPES);
 }
@@ -57,38 +77,49 @@ export class Core {
             if (color && color.startsWith('#')) {
                 // Remove # and convert to RGB
                 const hex = color.slice(1);
-                const r = parseInt(hex.slice(0, 2), 16);
-                const g = parseInt(hex.slice(2, 4), 16);
-                const b = parseInt(hex.slice(4, 6), 16);
-
-                return a ? `rgba(${r}, ${g}, ${b}, ${(100 - a) / 100})` : `rgb(${r}, ${g}, ${b})`;
+                return a
+                    ? `#${hex}${Math.round((255 / 100) * (100 - a))
+                          .toString(16)
+                          .padStart(2, '0')
+                          .toUpperCase()}`
+                    : `#${hex}`;
+            } else {
+                const hex = COLOR_CONSTANTS[color];
+                return hex
+                    ? a
+                        ? `#${hex}${Math.round((255 / 100) * (100 - a))
+                              .toString(16)
+                              .padStart(2, '0')
+                              .toUpperCase()}`
+                        : `#${hex}`
+                    : a
+                    ? `rgba(${color}, ${(100 - a) / 100})`
+                    : color; // Handle existing RGB format
             }
-            // Handle existing RGB format
-            return a ? `rgba(${color}, ${(100 - a) / 100})` : color;
         },
-        white: 'white',
-        lime: 'lime',
-        green: 'green',
-        red: 'red',
-        maroon: 'maroon',
-        black: 'black',
-        gray: 'gray',
-        blue: 'blue',
-        yellow: 'yellow',
-        orange: 'orange',
-        purple: 'purple',
-        pink: 'pink',
-        brown: 'brown',
-        teal: 'teal',
-        cyan: 'cyan',
-        navy: 'navy',
-        indigo: 'indigo',
-        violet: 'violet',
-        magenta: 'magenta',
-        rose: 'rose',
-        gold: 'gold',
-        silver: 'silver',
-        bronze: 'bronze',
+        white: COLOR_CONSTANTS['white'],
+        lime: COLOR_CONSTANTS['lime'],
+        green: COLOR_CONSTANTS['green'],
+        red: COLOR_CONSTANTS['red'],
+        maroon: COLOR_CONSTANTS['maroon'],
+        black: COLOR_CONSTANTS['black'],
+        gray: COLOR_CONSTANTS['gray'],
+        blue: COLOR_CONSTANTS['blue'],
+        yellow: COLOR_CONSTANTS['yellow'],
+        orange: COLOR_CONSTANTS['orange'],
+        purple: COLOR_CONSTANTS['purple'],
+        pink: COLOR_CONSTANTS['pink'],
+        brown: COLOR_CONSTANTS['brown'],
+        teal: COLOR_CONSTANTS['teal'],
+        cyan: COLOR_CONSTANTS['cyan'],
+        navy: COLOR_CONSTANTS['navy'],
+        indigo: COLOR_CONSTANTS['indigo'],
+        violet: COLOR_CONSTANTS['violet'],
+        magenta: COLOR_CONSTANTS['magenta'],
+        rose: COLOR_CONSTANTS['rose'],
+        gold: COLOR_CONSTANTS['gold'],
+        silver: COLOR_CONSTANTS['silver'],
+        bronze: COLOR_CONSTANTS['bronze'],
     };
     constructor(private context: any) {}
     private extractPlotOptions(options: PlotCharOptions) {
