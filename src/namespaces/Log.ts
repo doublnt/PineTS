@@ -3,6 +3,16 @@
 import { Series } from '../Series';
 import { Context } from '..';
 
+function formatWithTimezone(date = new Date()) {
+    const offset = -date.getTimezoneOffset();
+    const sign = offset >= 0 ? '+' : '-';
+    const pad = (n) => String(Math.floor(Math.abs(n))).padStart(2, '0');
+
+    const tz = sign + pad(offset / 60) + ':' + pad(offset % 60);
+
+    return `[${date.toISOString().slice(0, -1)}${tz}]`;
+}
+
 export class Log {
     constructor(private context: Context) {}
 
@@ -14,12 +24,21 @@ export class Log {
         return Series.from(source).get(index);
     }
     warning(message: string, ...args: any[]) {
-        console.warn(this.logFormat(message, ...args));
+        const _timestamp = this.context.data['openTime'].data[this.context.idx];
+        const _time = formatWithTimezone(new Date(_timestamp));
+
+        console.warn(`${_time} ${this.logFormat(message, ...args)}`);
     }
     error(message: string, ...args: any[]) {
-        console.error(this.logFormat(message, ...args));
+        const _timestamp = this.context.data['openTime'].data[this.context.idx];
+        const _time = formatWithTimezone(new Date(_timestamp));
+
+        console.error(`${_time} ${this.logFormat(message, ...args)}`);
     }
     info(message: string, ...args: any[]) {
-        console.log(this.logFormat(message, ...args));
+        const _timestamp = this.context.data['openTime'].data[this.context.idx];
+        const _time = formatWithTimezone(new Date(_timestamp));
+
+        console.log(`${_time} ${this.logFormat(message, ...args)}`);
     }
 }

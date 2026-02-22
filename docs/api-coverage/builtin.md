@@ -32,8 +32,8 @@ parent: API Coverage
 | `minute`          |        | Minute                                 |
 | `month`           |        | Month                                  |
 | `second`          |        | Second                                 |
-| `time`            |        | Bar time                               |
-| `time_close`      |        | Bar close time                         |
+| `time`            | ✅     | Bar time                               |
+| `time_close`      | ✅     | Bar close time                         |
 | `time_tradingday` |        | Trading day time                       |
 | `weekofyear`      |        | Week of year                           |
 | `year`            |        | Year                                   |
@@ -77,9 +77,9 @@ parent: API Coverage
 | `strategy()`       |        | Strategy declaration  |
 | `string()`         | ✅     | String conversion     |
 | `table()`          |        | Table object          |
-| `time()`           |        | Time function         |
-| `time_close()`     |        | Time close function   |
-| `timestamp()`      |        | Timestamp function    |
+| `time()`           | ✅     | Time function         |
+| `time_close()`     | ✅     | Time close function   |
+| `timestamp()`      | ✅     | Timestamp function    |
 | `weekofyear()`     |        | Week of year function |
 | `year()`           |        | Year function         |
 | `runtime.error()`  |        | Runtime error         |

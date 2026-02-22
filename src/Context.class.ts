@@ -6,7 +6,7 @@ import { PineArray } from './namespaces/array/array.index';
 import { PineMap } from './namespaces/map/map.index';
 import { PineMatrix } from './namespaces/matrix/matrix.index';
 import { Barstate } from './namespaces/Barstate';
-import { Core } from './namespaces/Core';
+import { Core, NAHelper, TimeHelper } from './namespaces/Core';
 import { Input } from './namespaces/input/input.index';
 import PineMath from './namespaces/math/math.index';
 import { PineRequest } from './namespaces/request/request.index';
@@ -40,6 +40,7 @@ export class Context {
     public NA: any = NaN;
 
     public lang: any;
+    public length: number = 0;
 
     // Combined namespace and core functions - the default way to access everything
     public pine: {
@@ -127,13 +128,16 @@ export class Context {
         const coreFunctions = {
             Type: core.Type.bind(core),
 
-            na: core.na.bind(core),
+            na: new NAHelper(),
             color: core.color,
 
             nz: core.nz.bind(core),
             indicator: core.indicator.bind(core),
             fixnan: core.fixnan.bind(core),
             alertcondition: core.alertcondition.bind(core),
+            timestamp: core.timestamp.bind(core),
+            time: new TimeHelper(this, 'openTime'),
+            time_close: new TimeHelper(this, 'closeTime'),
             //types
             bool: core.bool.bind(core),
         };
@@ -199,7 +203,7 @@ export class Context {
                 'style_stepline_diamond',
                 'style_steplinebr',
             ],
-            'plot'
+            'plot',
         );
 
         this.bindContextObject(hlineHelper, ['any', 'style_dashed', 'style_solid', 'style_dotted', 'param'], 'hline');
@@ -270,12 +274,11 @@ export class Context {
                 'style_none',
                 'style_text_outline',
             ],
-            'label'
+            'label',
         );
         Object.defineProperty(this.pine['label'], 'all', {
             get: () => labelHelper.all,
         });
-
     }
 
     private bindContextObject(instance: any, entries: string[], root: string = '') {
@@ -604,12 +607,12 @@ export class Context {
                     'color: #FFA500; font-weight: bold;',
                     'color: #FFA500;',
                     oldUsage,
-                    newUsage
+                    newUsage,
                 );
             } else {
                 // Node.js environment - use ANSI color codes
                 console.warn(
-                    `\x1b[33m[WARNING] ${oldUsage} syntax is deprecated. Use ${newUsage} instead. This will be removed in a future version.\x1b[0m`
+                    `\x1b[33m[WARNING] ${oldUsage} syntax is deprecated. Use ${newUsage} instead. This will be removed in a future version.\x1b[0m`,
                 );
             }
         }
