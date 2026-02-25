@@ -3,12 +3,12 @@
 import { Series } from '../Series';
 import { Context } from '..';
 
-function formatWithTimezone(date = new Date()) {
-    const offset = -date.getTimezoneOffset();
-    const sign = offset >= 0 ? '+' : '-';
+function formatWithTimezone(date = new Date(), offset?: number) {
+    const _offset = offset ?? -date.getTimezoneOffset();
+    const sign = _offset >= 0 ? '+' : '-';
     const pad = (n) => String(Math.floor(Math.abs(n))).padStart(2, '0');
 
-    const tz = sign + pad(offset / 60) + ':' + pad(offset % 60);
+    const tz = sign + pad(_offset / 60) + ':' + pad(_offset % 60);
 
     return `[${date.toISOString().slice(0, -1)}${tz}]`;
 }
@@ -25,19 +25,22 @@ export class Log {
     }
     warning(message: string, ...args: any[]) {
         const _timestamp = this.context.data['openTime'].data[this.context.idx];
-        const _time = formatWithTimezone(new Date(_timestamp));
+        //FIXME : we are forcing UTC for now, we need to handle the timezone properly
+        const _time = formatWithTimezone(new Date(_timestamp), 0);
 
         console.warn(`${_time} ${this.logFormat(message, ...args)}`);
     }
     error(message: string, ...args: any[]) {
         const _timestamp = this.context.data['openTime'].data[this.context.idx];
-        const _time = formatWithTimezone(new Date(_timestamp));
+        //FIXME : we are forcing UTC for now, we need to handle the timezone properly
+        const _time = formatWithTimezone(new Date(_timestamp), 0);
 
         console.error(`${_time} ${this.logFormat(message, ...args)}`);
     }
     info(message: string, ...args: any[]) {
         const _timestamp = this.context.data['openTime'].data[this.context.idx];
-        const _time = formatWithTimezone(new Date(_timestamp));
+        //FIXME : we are forcing UTC for now, we need to handle the timezone properly
+        const _time = formatWithTimezone(new Date(_timestamp), 0);
 
         console.log(`${_time} ${this.logFormat(message, ...args)}`);
     }
