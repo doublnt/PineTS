@@ -194,6 +194,11 @@ export class Context {
             },
             log: new Log(this),
             str: new Str(this),
+            // Stub for linefill namespace (not yet fully implemented)
+            linefill: {
+                param: (source: any, _index?: any, _name?: string) => source,
+                new: (..._args: any[]) => { /* linefill.new stub - no-op */ },
+            },
             ...coreFunctions,
             ...types,
         };

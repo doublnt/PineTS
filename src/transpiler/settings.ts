@@ -50,6 +50,7 @@ export const CONTEXT_PINE_VARS = [
     'label',
     'table',
     'chart',
+    'linefill',
     'map',
     'matrix',
     'log',

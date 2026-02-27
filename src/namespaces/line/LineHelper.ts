@@ -61,6 +61,25 @@ export class LineHelper {
         return { x: 0, xloc: 'bar_index' };
     }
 
+    /**
+     * Resolve a value that may be a Series, a bound function, or a plain scalar.
+     * Pine Script variables (inputs, chart properties) can be stored as Series
+     * objects or bound methods in the PineTS runtime. This ensures the resolved
+     * scalar value is used for line properties.
+     */
+    private _resolve(val: any): any {
+        if (val === null || val === undefined) return val;
+        // Resolve Series-like objects (has data array and get method)
+        if (typeof val === 'object' && Array.isArray(val.data) && typeof val.get === 'function') {
+            return val.get(0);
+        }
+        // Resolve bound functions (like chart.bg_color, chart.fg_color)
+        if (typeof val === 'function') {
+            return val();
+        }
+        return val;
+    }
+
     private _createLine(
         x1: number,
         y1: number,
@@ -73,7 +92,15 @@ export class LineHelper {
         width: number = 1,
         force_overlay: boolean = false,
     ): LineObject {
-        const ln = new LineObject(x1, y1, x2, y2, xloc, extend, color, style, width, force_overlay);
+        // Resolve any Series/function values to scalars for line properties
+        const ln = new LineObject(
+            x1, y1, x2, y2, xloc,
+            this._resolve(extend),
+            this._resolve(color),
+            this._resolve(style),
+            this._resolve(width) || 1,
+            force_overlay,
+        );
         this._lines.push(ln);
         this._syncToPlot();
         return ln;
@@ -159,19 +186,19 @@ export class LineHelper {
     }
 
     set_color(id: LineObject, color: string): void {
-        if (id && !id._deleted) id.color = color;
+        if (id && !id._deleted) id.color = this._resolve(color);
     }
 
     set_width(id: LineObject, width: number): void {
-        if (id && !id._deleted) id.width = width;
+        if (id && !id._deleted) id.width = this._resolve(width) || 1;
     }
 
     set_style(id: LineObject, style: string): void {
-        if (id && !id._deleted) id.style = style;
+        if (id && !id._deleted) id.style = this._resolve(style);
     }
 
     set_extend(id: LineObject, extend: string): void {
-        if (id && !id._deleted) id.extend = extend;
+        if (id && !id._deleted) id.extend = this._resolve(extend);
     }
 
     set_xloc(id: LineObject, x1: number, x2: number, xloc: string): void {
