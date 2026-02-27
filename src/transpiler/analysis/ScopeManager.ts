@@ -248,6 +248,11 @@ export class ScopeManager {
         }
     }
 
+    getCurrentHoistingScope(): any[] | null {
+        if (this.hoistingStack.length === 0) return null;
+        return this.hoistingStack[this.hoistingStack.length - 1];
+    }
+
     setSuppressHoisting(suppress: boolean): void {
         this.suppressHoisting = suppress;
     }
