@@ -18,10 +18,6 @@
 - **Label & Line Value Resolution**: Values passed to label and line setters can now be Series, bound functions, or plain scalars — all are correctly resolved.
 - **For Loops Runtime Direction**: Added support for for loops where the iteration direction is determined at runtime.
 
-### Changed
-
-- **Licensing**: Updated to dual license model (MIT + Commercial) with sponsor information.
-
 ## [0.8.11] - 2026-02-21 - Time Functions, Log Timezone, Transpiler & TA Window Fixes
 
 ### Added
