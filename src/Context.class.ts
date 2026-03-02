@@ -23,6 +23,7 @@ import { LabelHelper } from './namespaces/label/LabelHelper';
 import { LineHelper } from './namespaces/line/LineHelper';
 import { LinefillHelper } from './namespaces/linefill/LinefillHelper';
 import { PolylineHelper } from './namespaces/polyline/PolylineHelper';
+import { TableHelper } from './namespaces/table/TableHelper';
 
 export class Context {
     public data: any = {
@@ -382,6 +383,41 @@ export class Context {
         );
         Object.defineProperty(this.pine['polyline'], 'all', {
             get: () => polylineHelper.all,
+        });
+
+        // table namespace
+        const tableHelper = new TableHelper(this);
+        this.bindContextObject(
+            tableHelper,
+            [
+                'any',
+                'new',
+                'param',
+                'cell',
+                'delete',
+                'clear',
+                'merge_cells',
+                'cell_set_text',
+                'cell_set_bgcolor',
+                'cell_set_text_color',
+                'cell_set_text_size',
+                'cell_set_height',
+                'cell_set_width',
+                'cell_set_tooltip',
+                'cell_set_text_halign',
+                'cell_set_text_valign',
+                'cell_set_text_font_family',
+                'set_position',
+                'set_bgcolor',
+                'set_border_color',
+                'set_border_width',
+                'set_frame_color',
+                'set_frame_width',
+            ],
+            'table',
+        );
+        Object.defineProperty(this.pine['table'], 'all', {
+            get: () => tableHelper.all,
         });
     }
 
