@@ -22,6 +22,7 @@ import { ChartHelper } from './namespaces/chart/ChartHelper';
 import { LabelHelper } from './namespaces/label/LabelHelper';
 import { LineHelper } from './namespaces/line/LineHelper';
 import { LinefillHelper } from './namespaces/linefill/LinefillHelper';
+import { PolylineHelper } from './namespaces/polyline/PolylineHelper';
 
 export class Context {
     public data: any = {
@@ -370,6 +371,17 @@ export class Context {
         );
         Object.defineProperty(this.pine['linefill'], 'all', {
             get: () => linefillHelper.all,
+        });
+
+        // polyline namespace
+        const polylineHelper = new PolylineHelper(this);
+        this.bindContextObject(
+            polylineHelper,
+            ['any', 'new', 'param', 'delete'],
+            'polyline',
+        );
+        Object.defineProperty(this.pine['polyline'], 'all', {
+            get: () => polylineHelper.all,
         });
     }
 
