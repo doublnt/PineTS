@@ -734,6 +734,13 @@ export function transformForStatement(node: any, scopeManager: ScopeManager, c: 
     scopeManager.pushScope('for');
     c(node.body, scopeManager);
     scopeManager.popScope();
+
+    // Clean up loop variable so it doesn't leak to outer scope
+    // (prevents shadowing issues when the same name is reused later)
+    if (node.init && node.init.type === 'VariableDeclaration') {
+        const decl = node.init.declarations[0];
+        scopeManager.removeLoopVariable(decl.id.name);
+    }
 }
 
 export function transformWhileStatement(node: any, scopeManager: ScopeManager, c: any): void {
