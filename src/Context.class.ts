@@ -12,6 +12,7 @@ import { Input } from './namespaces/input/input.index';
 import PineMath from './namespaces/math/math.index';
 import { PineRequest } from './namespaces/request/request.index';
 import TechnicalAnalysis from './namespaces/ta/ta.index';
+import { PineTypeObject } from './namespaces/PineTypeObject';
 import { Series } from './Series';
 import { Log } from './namespaces/Log';
 import { Str } from './namespaces/Str';
@@ -44,11 +45,15 @@ export class Context {
     public cache: any = {};
     public taState: any = {}; // State for incremental TA calculations
     public isSecondaryContext: boolean = false; // Flag to prevent infinite recursion in request.security
+    public dataVersion: number = 0; // Incremented when market data changes (streaming mode)
 
     public NA: any = NaN;
 
     public lang: any;
     public length: number = 0;
+
+    /** References to drawing helpers for streaming rollback */
+    public _drawingHelpers: { rollbackFromBar(barIdx: number): void }[] = [];
 
     // Combined namespace and core functions - the default way to access everything
     public pine: {
@@ -415,6 +420,9 @@ export class Context {
             get: () => polylineHelper.all,
         });
 
+        // Register drawing helpers for streaming rollback
+        this._drawingHelpers = [labelHelper, lineHelper, boxHelper, linefillHelper, polylineHelper];
+
         // table namespace
         const tableHelper = new TableHelper(this);
         this.bindContextObject(
@@ -449,6 +457,16 @@ export class Context {
         Object.defineProperty(this.pine['table'], 'all', {
             get: () => tableHelper.all,
         });
+    }
+
+    /**
+     * Roll back all drawing objects created at or after the given bar index.
+     * Called during streaming updates to prevent accumulation when bars are re-processed.
+     */
+    rollbackDrawings(fromBarIdx: number): void {
+        for (const helper of this._drawingHelpers) {
+            helper.rollbackFromBar(fromBarIdx);
+        }
     }
 
     private bindContextObject(instance: any, entries: string[], root: string = '') {
@@ -533,6 +551,20 @@ export class Context {
         // First bar: evaluate thunk if source is a deferred factory call
         if (typeof src === 'function') {
             src = src();
+        }
+
+        // Resolve thunks inside PineTypeObject fields (UDT instances).
+        // When a `var` declaration initializes a UDT with factory calls like
+        // `MyType.new(line.new(...), label.new(...))`, the factory calls are
+        // wrapped in thunks to prevent orphan objects on bars 1+. Here on bar 0,
+        // we evaluate those thunks to get the actual drawing objects.
+        if (src instanceof PineTypeObject) {
+            const def = src.__def__;
+            for (const key in def) {
+                if (typeof src[key] === 'function') {
+                    src[key] = src[key]();
+                }
+            }
         }
 
         // First bar: Initialize with source value

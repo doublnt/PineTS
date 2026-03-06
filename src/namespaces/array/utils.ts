@@ -33,7 +33,8 @@ export function inferValueType(value: any): PineArrayType {
     } else if (typeof value === 'boolean') {
         return PineArrayType.bool;
     } else {
-        throw new Error('Cannot infer type from value');
+        // Objects (LineObject, LabelObject, BoxObject, etc.) get 'any' type
+        return PineArrayType.any;
     }
 }
 
@@ -64,6 +65,14 @@ export function isValueOfType(value: any, type: PineArrayType) {
             return typeof value === 'string';
         case PineArrayType.bool:
             return typeof value === 'boolean';
+        // Drawing object types accept any object (or null for na)
+        case PineArrayType.box:
+        case PineArrayType.label:
+        case PineArrayType.line:
+        case PineArrayType.linefill:
+        case PineArrayType.table:
+        case PineArrayType.color:
+            return value === null || typeof value === 'object' || typeof value === 'string';
     }
     return false;
 }

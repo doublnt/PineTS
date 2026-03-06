@@ -1,20 +1,49 @@
 # Change Log
 
-## [0.9.2] - 2026-03-05 - Gradient Fill, Matrix Inverse, Array Optimizations & Plot Fixes
+## [0.9.3] - 2026-03-06 - Streaming Support, request.security Fixes, Transpiler Robustness
 
 ### Added
 
-- **Gradient Fill (`fill()`)**: Added support for Pine Script's gradient fill signature — `fill(plot1, plot2, top_value, bottom_value, top_color, bottom_color)`. The `FillHelper` now detects the gradient form by checking whether the third argument is a number (gradient) or a string/color (simple fill), and stores per-bar `top_value`/`bottom_value`/`top_color`/`bottom_color` data for rendering.
+- **`array.new_box` / `new_label` / `new_line` / `new_linefill` / `new_table` / `new_color`**: Added the six missing typed array factory methods so `array<box>`, `array<label>`, etc. can be created with a proper element type. The auto-generator (`scripts/generate-array-index.js`) now lists them as static factory functions (called with context) rather than instance delegates. `isValueOfType` in `array/utils.ts` was extended to accept object values for these types, allowing `array.push(label.new(...))` on typed arrays.
+- **`request.security` — Live Streaming Support**: `request.security` now correctly handles live (streaming) bar updates. The secondary context is re-evaluated on each tick, and `findSecContextIdx` resolves the correct intra-bar index for the current live bar. Paired with drawing-object rollback (see below), streaming ticks no longer produce duplicate drawing objects.
+- **`str.tostring` Format Patterns**: Added support for Pine Script's named and pattern-based format strings: `"#"`, `"#.#"`, `"#.##"`, `"0.00"`, and the `format.*` named constants. The formatter now applies these patterns before falling back to `toString()`.
 
 ### Fixed
 
-- **`matrix.inv()` — Full NxN Support**: Rewrote `matrix.inv()` from a 2×2-only implementation to a general Gauss-Jordan elimination with partial pivoting, supporting any square matrix of arbitrary size. Singular matrices (pivot < 1e-14) correctly return a NaN matrix.
-- **`matrix.pinv()` — Real Pseudoinverse**: Rewrote `matrix.pinv()` from a placeholder stub to a correct Moore-Penrose pseudoinverse: square matrices use `inv()`, tall matrices (m > n) use `(AᵀA)⁻¹Aᵀ`, and wide matrices (m < n) use `Aᵀ(AAᵀ)⁻¹`.
-- **`array.min()` / `array.max()` Performance**: Added an O(N) fast path for the common `nth=0` case (find absolute min/max) instead of always sorting the full array O(N log N). Sorting is still used only when `nth > 0`.
-- **`array.median()` Performance**: Replaced the `for...of` copy + complex sort comparator with a direct index loop and simple numeric sort for faster execution.
-- **`array.percentile_linear_interpolation()` Performance**: Validate and copy the array in a single pass (eliminating the separate `validValues` allocation), then sort once.
-- **`array.percentile_nearest_rank()` Performance**: Same single-pass validate-and-copy optimization as `percentile_linear_interpolation`.
-- **`isPlot()` with Undefined Title**: Fixed the `isPlot()` helper check to accept plots that have no `title` property but do have a `_plotKey` property (e.g., plots created via `fill()` or accessed by callsite ID). Previously these were not recognised as plot objects, causing `fill()` to misidentify its arguments (contribution by @dcaoyuan, [#142](https://github.com/QuantForgeOrg/PineTS/issues/142)).
+- **While-Loop Test Condition Hoisting** (infinite-loop crash): `array.size()` and similar calls in a `while` condition were being hoisted to a temp variable *outside* the loop by the default CallExpression walker, making them one-shot evaluations and causing an infinite loop followed by a crash. `MainTransformer` now registers a `WhileStatement` handler and `transformWhileStatement` was rewritten to use a recursive walker with hoisting suppressed throughout the entire test condition.
+- **Array Pattern Scoping Crash**: `isArrayPatternVar` was determined using a global (non-scoped) set in `ScopeManager`. A local function variable whose name happened to match an outer-scope destructured tuple element was falsely treated as an array pattern, causing a runtime crash. Fixed by adding a shape guard: the flag is only set when `decl.init` is a computed `MemberExpression` (the `_tmp_0[0]` pattern produced by the AnalysisPass destructuring rewrite).
+- **For-Loop Namespace Wrapping** (`math.min` → `$.get(math, 0).min`): In the for-loop test condition walker, `MemberExpression` nodes unconditionally recursed into their object, causing the `Identifier` handler to wrap context-bound namespace objects (`math`, `array`, `ta`, …) with `$.get()`. Fixed by skipping recursion and `addArrayAccess` for identifiers that are the object of a `MemberExpression` and are context-bound namespaces.
+- **`request.security` Cross-Timeframe Value Alignment**: `barmerge.gaps_off` / `barmerge.lookahead_off` were passed as strings; their truthiness caused `findLTFContextIdx` to take the wrong branch (returning the first intra-bar instead of the last). Fixed by converting barmerge string enums to booleans. Added `normalizeTimeframe()` to map non-canonical formats (`'1h'`→`'60'`, `'1d'`→`'D'`) so `isLTF` determination is correct. Fixed secondary context date-range derivation to use `effectiveSDate` from `marketData` and extend `secEDate` to cover the last bar's intra-bars.
+- **`barmerge` Missing from `CONTEXT_BOUND_VARS`**: `barmerge.gaps_off` / `barmerge.lookahead_off` (used in `request.security()`) were not in the transpiler's context-bound list, so they were left as bare identifiers instead of being mapped to the runtime context. Added `'barmerge'` to `settings.ts`.
+- **`barstate.isconfirmed` Wrong Bar**: Was checking whether the last bar's close time equalled the session close via `closeTime[length-1]` (always the last bar in history) instead of the currently-executing bar. Fixed to use `closeTime.data[context.idx]` for correct per-bar evaluation.
+- **`array.get()` Out-of-Bounds → NaN**: `array.get(arr, -1)` and other out-of-bounds accesses returned `undefined` (native JS), causing crashes when Pine Script code accessed properties (e.g., `.strength`) on the result. The method now returns `NaN` (Pine's `na`) for negative or out-of-range indices.
+- **Drawing Helpers — `na` Color Resolution**: Drawing object helpers' `_resolve()` method now detects `NAHelper` instances and returns `NaN`, fixing cases where `border_color=na` (and similar `na` arguments) were silently ignored in `box.new()`, `line.new()`, etc. `BoxHelper` also gains a dedicated `_resolveColor()` that preserves `NaN` instead of letting it fall through an `||` fallback to the default color.
+- **Streaming Rollback for Drawing Objects**: All five drawing types (`box`, `line`, `label`, `linefill`, `polyline`) now track a `_createdAtBar` property and expose a `rollbackFromBar(barIndex)` method. `Context.rollbackDrawings()` calls this during `_runPaginated` / `updateTail` to remove any drawing objects created on the current streaming bar before re-running it, preventing duplicate objects from accumulating across live ticks.
+
+---
+
+## [0.9.2] - 2026-03-06 - Drawing Object Method Syntax, Gradient Fill, Matrix & Array Improvements
+
+### Added
+
+- **Method-Call Syntax on Drawing Instances**: `LineObject`, `LabelObject`, and `BoxObject` now carry delegate setter/getter methods directly on the instance (e.g., `myLine.set_x2(x)`, `myBox.set_right(r)`, `myLabel.set_text(t)`). Each delegate forwards to the owning helper so the plot sync (`_syncToPlot`) fires correctly. Enables Pine Script patterns where drawing objects stored in UDTs or arrays are mutated via method syntax.
+- **Gradient Fill (`fill()`)**: Added support for Pine Script's gradient fill signature — `fill(plot1, plot2, top_value, bottom_value, top_color, bottom_color)`. The `FillHelper` detects the gradient form (third argument is a number) and stores per-bar `top_value`/`bottom_value`/`top_color`/`bottom_color` data for the renderer.
+- **Typed Generic Function Parameters**: The Pine Script parser now correctly handles generic type annotations in function parameter lists (e.g., `array<float> src`, `map<string, float> data`). Previously these caused parse errors.
+
+### Fixed
+
+- **UDT Thunk Resolution for Drawing Object Fields**: When a `var` UDT instance contains fields initialised with factory calls (e.g., `line.new(...)`, `box.new(...)`), those fields are now correctly resolved as thunks on bar 0 inside `initVar`. Previously the thunk-wrapped factory results were stored as raw functions in the UDT field, causing the drawing object to never be created.
+- **Typed Array Type Inference for Object Types**: `inferValueType()` no longer throws `"Cannot infer type from value"` when called with an object (e.g., a `LineObject` or `BoxObject`). It now returns `PineArrayType.any`, allowing `array<line>` and similar typed arrays to work correctly.
+- **Non-Computed Namespace Property Access in `$.param()`**: Fixed `ExpressionTransformer` incorrectly wrapping namespace constant accesses (e.g., `label.style_label_down`, `line.style_dashed`) in `$.get()` calls when they appeared inside function arguments. The transformer now detects non-computed member access on `NAMESPACES_LIKE` identifiers and leaves them untransformed.
+- **`histbase` Type in `PlotOptions`**: Fixed the `histbase` field in the `PlotOptions` TypeScript type from `boolean` to `number`, matching the actual Pine Script `plot(histbase=50)` signature.
+- **For-Loop `MemberExpression` Recursion**: Fixed user variable identifiers inside method calls in `for` loops (e.g., `lineMatrix.rows()`) not being transformed. The `MemberExpression` visitor in `transformForStatement` now recurses into the object node after transformation so nested identifiers are correctly resolved.
+- **Multiline `and` / Comparison Expressions**: Fixed the Pine Script parser dropping continuation lines in `and`/`&&` chains and comparison expressions spanning multiple lines. `skipNewlines(true)` is now called after the operator.
+- **`matrix.inv()` — Full NxN Support**: Rewrote `matrix.inv()` from a 2×2-only implementation to Gauss-Jordan elimination with partial pivoting, supporting any square matrix. Singular matrices (pivot < 1e-14) return a NaN matrix.
+- **`matrix.pinv()` — Real Pseudoinverse**: Rewrote `matrix.pinv()` from a placeholder stub to a correct Moore-Penrose pseudoinverse: square → `inv()`, tall (m > n) → `(AᵀA)⁻¹Aᵀ`, wide (m < n) → `Aᵀ(AAᵀ)⁻¹`.
+- **`array.min()` / `array.max()` Performance**: Added an O(N) fast path for the common `nth=0` case instead of always sorting O(N log N).
+- **`array.median()`, `percentile_linear_interpolation()`, `percentile_nearest_rank()` Performance**: Single-pass copy-and-validate optimizations.
+- **`isPlot()` with Undefined Title**: Fixed `isPlot()` to accept plot objects that have `_plotKey` but no `title` property (e.g., fill plots created via callsite ID), preventing `fill()` from misidentifying its arguments (contribution by @dcaoyuan, [#142](https://github.com/QuantForgeOrg/PineTS/issues/142)).
+- **Duplicate `map` in `CONTEXT_PINE_VARS`**: Removed an accidental duplicate `'map'` entry from `settings.ts`.
 
 ## [0.9.1] - 2026-03-04 - Enum Values, ATR/DMI/Supertrend Fixes, UDT & Transpiler Improvements
 

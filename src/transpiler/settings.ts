@@ -55,7 +55,6 @@ export const CONTEXT_PINE_VARS = [
     'map',
     'matrix',
     'log',
-    'map',
     //types
     'Type', //UDT
     'bool',
@@ -101,6 +100,9 @@ export const CONTEXT_PINE_VARS = [
     'font',
     'extend',
     'position',
+
+    // Merge constants (request.security)
+    'barmerge',
 
     // Adjustment constants
     'adjustment',

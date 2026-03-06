@@ -4,6 +4,7 @@ import { Series } from '../../Series';
 import { parseArgsForPineParams } from '../utils';
 import { LineObject } from './LineObject';
 import { ChartPointObject } from '../chart/ChartPointObject';
+import { NAHelper } from '../Core';
 
 //prettier-ignore
 const LINE_NEW_SIGNATURES = [
@@ -69,6 +70,8 @@ export class LineHelper {
      */
     private _resolve(val: any): any {
         if (val === null || val === undefined) return val;
+        // NAHelper (na) → resolve to NaN
+        if (val instanceof NAHelper) return NaN;
         // Resolve Series-like objects (has data array and get method)
         if (typeof val === 'object' && Array.isArray(val.data) && typeof val.get === 'function') {
             return val.get(0);
@@ -101,6 +104,8 @@ export class LineHelper {
             this._resolve(width) || 1,
             force_overlay,
         );
+        ln._helper = this;
+        ln._createdAtBar = this.context.idx;
         this._lines.push(ln);
         this._syncToPlot();
         return ln;
@@ -260,6 +265,8 @@ export class LineHelper {
     copy(id: LineObject): LineObject | undefined {
         if (!id) return undefined;
         const ln = id.copy();
+        ln._helper = this;
+        ln._createdAtBar = this.context.idx;
         this._lines.push(ln);
         this._syncToPlot();
         return ln;
@@ -273,6 +280,15 @@ export class LineHelper {
 
     get all(): LineObject[] {
         return this._lines.filter((l) => !l._deleted);
+    }
+
+    /**
+     * Remove all drawing objects created at or after the given bar index.
+     * Called during streaming rollback to prevent accumulation.
+     */
+    rollbackFromBar(barIdx: number): void {
+        this._lines = this._lines.filter((l) => l._createdAtBar < barIdx);
+        this._syncToPlot();
     }
 
     // --- Style constants ---
