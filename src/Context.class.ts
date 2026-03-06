@@ -45,6 +45,7 @@ export class Context {
     public cache: any = {};
     public taState: any = {}; // State for incremental TA calculations
     public isSecondaryContext: boolean = false; // Flag to prevent infinite recursion in request.security
+    public dataVersion: number = 0; // Incremented when market data changes (streaming mode)
 
     public NA: any = NaN;
 

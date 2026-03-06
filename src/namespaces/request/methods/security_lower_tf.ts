@@ -75,10 +75,18 @@ export function security_lower_tf(context: any) {
             pineTS.markAsSecondary();
 
             const secContext = await pineTS.run(context.pineTSCode);
-            context.cache[cacheKey] = secContext;
+            context.cache[cacheKey] = { pineTS, context: secContext, dataVersion: context.dataVersion };
         }
 
-        const secContext = context.cache[cacheKey];
+        const cached = context.cache[cacheKey];
+
+        // Refresh secondary context when main context's data has changed (streaming mode)
+        if (context.dataVersion > cached.dataVersion) {
+            await cached.pineTS.updateTail(cached.context);
+            cached.dataVersion = context.dataVersion;
+        }
+
+        const secContext = cached.context;
         
         const myOpenTime = Series.from(context.data.openTime).get(0);
         const myCloseTime = Series.from(context.data.closeTime).get(0);

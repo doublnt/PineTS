@@ -56,13 +56,28 @@ export function security(context: any) {
         const myOpenTime = Series.from(context.data.openTime).get(0);
         const myCloseTime = Series.from(context.data.closeTime).get(0);
 
+        // On the realtime (live) bar, lookahead_off has no effect per TradingView behavior:
+        // the current developing HTF values are returned instead of the previous completed bar.
+        // A bar is realtime only if it's the last bar AND its close time is in the future
+        // (i.e., the bar hasn't closed yet). In backtesting mode with a fixed eDate, all bars
+        // are historical even the last one, so isRealtime stays false.
+        const isRealtime = context.idx === context.length - 1 && myCloseTime > Date.now();
+
         // Cache key must be unique per symbol+timeframe+expression to avoid collisions
         const cacheKey = `${_symbol}_${_timeframe}_${_expression_name}`;
         // Cache key for tracking previous bar index (for gaps detection)
         const gapCacheKey = `${cacheKey}_prevIdx`;
 
         if (context.cache[cacheKey]) {
-            const secContext = context.cache[cacheKey];
+            const cached = context.cache[cacheKey];
+
+            // Refresh secondary context when main context's data has changed (streaming mode)
+            if (context.dataVersion > cached.dataVersion) {
+                await cached.pineTS.updateTail(cached.context);
+                cached.dataVersion = context.dataVersion;
+            }
+
+            const secContext = cached.context;
             const secContextIdx = isLTF
                 ? findLTFContextIdx(
                       myOpenTime,
@@ -73,7 +88,7 @@ export function security(context: any) {
                       context.eDate,
                       _gaps
                   )
-                : findSecContextIdx(myOpenTime, myCloseTime, secContext.data.openTime.data, secContext.data.closeTime.data, _lookahead);
+                : findSecContextIdx(myOpenTime, myCloseTime, secContext.data.openTime.data, secContext.data.closeTime.data, _lookahead, isRealtime);
 
             if (secContextIdx == -1) {
                 return NaN;
@@ -135,7 +150,7 @@ export function security(context: any) {
 
         const secContext = await pineTS.run(context.pineTSCode);
 
-        context.cache[cacheKey] = secContext;
+        context.cache[cacheKey] = { pineTS, context: secContext, dataVersion: context.dataVersion };
 
         const secContextIdx = isLTF
             ? findLTFContextIdx(
@@ -147,7 +162,7 @@ export function security(context: any) {
                   context.eDate,
                   _gaps
               )
-            : findSecContextIdx(myOpenTime, myCloseTime, secContext.data.openTime.data, secContext.data.closeTime.data, _lookahead);
+            : findSecContextIdx(myOpenTime, myCloseTime, secContext.data.openTime.data, secContext.data.closeTime.data, _lookahead, isRealtime);
 
         if (secContextIdx == -1) {
             return NaN;
