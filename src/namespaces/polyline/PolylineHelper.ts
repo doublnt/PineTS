@@ -54,6 +54,16 @@ export class PolylineHelper {
     }
 
     /**
+     * Resolve a color value, preserving NaN (na = no color) instead of
+     * letting it fall through to a default via the || operator.
+     */
+    private _resolveColor(val: any, fallback: string): any {
+        const resolved = this._resolve(val);
+        if (typeof resolved === 'number' && isNaN(resolved)) return NaN;
+        return resolved || fallback;
+    }
+
+    /**
      * Extract raw ChartPointObject array from a PineArrayObject, Series, or plain array.
      */
     private _extractPoints(points: any): ChartPointObject[] {
@@ -123,8 +133,8 @@ export class PolylineHelper {
             this._resolve(curved) ?? false,
             this._resolve(closed) ?? false,
             this._resolve(xloc) || 'bi',
-            this._resolve(line_color) || '#2962ff',
-            this._resolve(fill_color) || '',
+            this._resolveColor(line_color, '#2962ff'),
+            this._resolveColor(fill_color, ''),
             this._resolve(line_style) || 'style_solid',
             this._resolve(line_width) || 1,
             this._resolve(force_overlay) ?? false,

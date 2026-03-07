@@ -3,7 +3,24 @@ export const KNOWN_NAMESPACES = ['ta', 'math', 'request', 'array', 'input'];
 
 // This is used to transform ns() calls to ns.any() calls
 // Entries with a __value property also support dual-use as variables (e.g. time, na)
-export const NAMESPACES_LIKE = ['hline', 'plot', 'fill', 'label', 'line', 'na', 'time', 'time_close', 'dayofmonth', 'dayofweek', 'hour', 'minute', 'month', 'second', 'weekofyear', 'year'];
+export const NAMESPACES_LIKE = [
+    'hline',
+    'plot',
+    'fill',
+    'label',
+    'line',
+    'na',
+    'time',
+    'time_close',
+    'dayofmonth',
+    'dayofweek',
+    'hour',
+    'minute',
+    'month',
+    'second',
+    'weekofyear',
+    'year',
+];
 
 // Async methods that require await keyword (format: 'namespace.method')
 export const ASYNC_METHODS = ['request.security', 'request.security_lower_tf'];
@@ -39,6 +56,7 @@ export const CONTEXT_PINE_VARS = [
 
     //
     'alertcondition',
+    'max_bars_back',
     'fixnan',
     'na',
     'color',

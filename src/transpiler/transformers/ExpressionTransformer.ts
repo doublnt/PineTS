@@ -1274,7 +1274,13 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
         // Check if methodName is a user-defined function (and not a built-in property like push/pop/size unless shadowed?)
         const isUserFunction = scopeManager.isUserFunction(methodName);
 
-        if (isUserFunction && !scopeManager.isContextBound(methodName)) {
+        // Guard: if the object is a function parameter, this is a built-in method
+        // call on a typed argument (e.g. t.cell() where t is a table param),
+        // NOT a call to the user function with the same name. Skip transformation.
+        const _obj = node.callee.object;
+        const isBuiltinMethodOnParam = _obj.type === 'Identifier' && scopeManager.isLocalSeriesVar(_obj.name);
+
+        if (isUserFunction && !scopeManager.isContextBound(methodName) && !isBuiltinMethodOnParam) {
             // It's a user variable/function.
             // Transform obj.method(args) -> method(obj, args)
             // 1. Get the object (first arg)

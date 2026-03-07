@@ -342,6 +342,12 @@ export class PineTS {
             // #4: Data changed — bump version so secondary contexts know to refresh
             context.dataVersion++;
 
+            // Update context.length so barstate.islast (which checks
+            // context.idx === context.length - 1) works correctly for new bars.
+            // Without this, barstate.islast stays false after new candles arrive,
+            // and any `if barstate.islast` drawing logic never executes.
+            context.length = this.data.length;
+
             // Always recalculate last candle + new ones
             // Remove last result (will be recalculated with fresh data)
             this._removeLastResult(context);

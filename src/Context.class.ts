@@ -148,6 +148,7 @@ export class Context {
             indicator: core.indicator.bind(core),
             fixnan: core.fixnan.bind(core),
             alertcondition: core.alertcondition.bind(core),
+            max_bars_back: core.max_bars_back.bind(core),
             timestamp: core.timestamp.bind(core),
             time: new TimeHelper(this, 'openTime'),
             time_close: new TimeHelper(this, 'closeTime'),

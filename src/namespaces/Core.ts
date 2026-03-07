@@ -308,7 +308,12 @@ export class Core {
     }
 
     alertcondition(condition, title, message) {
-        //console.warn('alertcondition called but is currently not implemented', condition, title, message);
+        console.warn('alertcondition called but is currently not implemented', condition, title, message);
+    }
+
+    max_bars_back(series?: any, length?: any) {
+        // No-op in PineTS — Pine Script uses this to hint the runtime about
+        // how many historical bars a series needs. PineTS keeps full history.
     }
 
     /**

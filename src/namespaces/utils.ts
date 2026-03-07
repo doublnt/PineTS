@@ -83,11 +83,17 @@ export function parseArgsForPineParams<T>(args: any[], signatures: any[], types:
                 continue;
             }
 
-            const typeChecker = TYPE_CHECK[types[optionName]];
-            if (typeof typeChecker === 'function' && typeChecker(arg)) {
+            // NaN represents Pine Script's `na` — always accept it regardless of expected type.
+            // This preserves "no value" semantics for colors, strings, etc.
+            if (typeof arg === 'number' && isNaN(arg)) {
                 options[optionName] = arg;
             } else {
-                valid[o] = false;
+                const typeChecker = TYPE_CHECK[types[optionName]];
+                if (typeof typeChecker === 'function' && typeChecker(arg)) {
+                    options[optionName] = arg;
+                } else {
+                    valid[o] = false;
+                }
             }
         }
     }
