@@ -15,22 +15,170 @@ import {
     transformFunctionDeclaration,
 } from './StatementTransformer';
 
+/**
+ * Post-pass: propagate async/await through user-defined function call chains.
+ *
+ * When request.security() is used inside a user-defined function, the transpiler
+ * injects `await` but doesn't mark the function as `async` or propagate await
+ * to callers via $.call(). This pass:
+ * 1. Finds all FunctionDeclarations containing AwaitExpression (directly, not in nested functions)
+ * 2. Marks them as async
+ * 3. Wraps $.call(fn, ...) invocations of those functions in AwaitExpression
+ * 4. Repeats until stable (handles transitive async infection: A calls B calls request.security)
+ */
+export function propagateAsyncAwait(ast: any): void {
+    const baseVisitor = { ...walk.base, LineComment: () => {} };
+
+    // Helper: extract function name from $.call() first argument
+    // Handles both: $.call(funcName, ...) and $.call($.get(funcName, 0), ...)
+    function getCallTargetName(arg: any): string | null {
+        if (!arg) return null;
+        if (arg.type === 'Identifier') return arg.name;
+        if (arg.type === 'CallExpression' &&
+            arg.callee?.type === 'MemberExpression' &&
+            arg.callee.object?.name === '$' &&
+            arg.callee.property?.name === 'get' &&
+            arg.arguments?.[0]?.type === 'Identifier') {
+            return arg.arguments[0].name;
+        }
+        return null;
+    }
+
+    // Step 1: Collect all function declarations by name
+    const funcDecls = new Map<string, any>();
+    walk.simple(ast, {
+        FunctionDeclaration(node: any) {
+            if (node.id?.name) funcDecls.set(node.id.name, node);
+        },
+    }, baseVisitor);
+
+    // Helper: check if a function body contains AwaitExpression at its own scope
+    // (not descending into nested functions — each function is its own async scope)
+    function bodyContainsAwait(body: any): boolean {
+        let found = false;
+        // Custom walker that stops at function boundaries
+        const scopedVisitor = {
+            ...baseVisitor,
+            // Override function types to NOT descend
+            FunctionDeclaration: () => {},
+            FunctionExpression: () => {},
+            ArrowFunctionExpression: () => {},
+        };
+        walk.simple(body, {
+            AwaitExpression() { found = true; },
+        }, scopedVisitor);
+        return found;
+    }
+
+    // Step 2: Iterate until stable — propagate async through the call chain
+    let changed = true;
+    let iterations = 0;
+    while (changed && iterations < 20) {
+        changed = false;
+        iterations++;
+
+        // 2a: Mark arrow/function expressions as async if their body contains await
+        walk.simple(ast, {
+            ArrowFunctionExpression(node: any) {
+                if (!node.async && bodyContainsAwait(node.body)) {
+                    node.async = true;
+                    changed = true;
+                }
+            },
+            FunctionExpression(node: any) {
+                if (!node.async && bodyContainsAwait(node.body)) {
+                    node.async = true;
+                    changed = true;
+                }
+            },
+        }, baseVisitor);
+
+        // 2b: Wrap async IIFE calls in await
+        // Pattern: (async () => {...})() returns a Promise → needs await
+        const iifeToWrap: any[] = [];
+        walk.simple(ast, {
+            CallExpression(node: any) {
+                if (!node._asyncWrapped &&
+                    (node.callee?.type === 'ArrowFunctionExpression' ||
+                     node.callee?.type === 'FunctionExpression') &&
+                    node.callee.async === true) {
+                    iifeToWrap.push(node);
+                }
+            },
+        }, baseVisitor);
+        for (const node of iifeToWrap) {
+            const clone: any = {};
+            for (const k of Object.keys(node)) { clone[k] = node[k]; }
+            clone._asyncWrapped = true;
+            for (const k of Object.keys(node)) { delete node[k]; }
+            node.type = 'AwaitExpression';
+            node.argument = clone;
+            changed = true;
+        }
+
+        // 2c: Find named functions containing await, mark them async
+        const asyncFuncNames = new Set<string>();
+        for (const [name, decl] of funcDecls) {
+            if (bodyContainsAwait(decl.body)) {
+                if (!decl.async) {
+                    decl.async = true;
+                    changed = true;
+                }
+                asyncFuncNames.add(name);
+            }
+        }
+
+        // 2d: Wrap $.call(asyncFunc, ...) invocations in await
+        if (asyncFuncNames.size > 0) {
+            const toWrap: any[] = [];
+            walk.simple(ast, {
+                CallExpression(node: any) {
+                    if (!node._asyncWrapped &&
+                        node.callee?.type === 'MemberExpression' &&
+                        node.callee.object?.name === '$' &&
+                        node.callee.property?.name === 'call' &&
+                        node.arguments?.length > 0) {
+                        const targetName = getCallTargetName(node.arguments[0]);
+                        if (targetName && asyncFuncNames.has(targetName)) {
+                            toWrap.push(node);
+                        }
+                    }
+                },
+            }, baseVisitor);
+
+            for (const node of toWrap) {
+                const clone: any = {};
+                for (const k of Object.keys(node)) { clone[k] = node[k]; }
+                clone._asyncWrapped = true;
+                for (const k of Object.keys(node)) { delete node[k]; }
+                node.type = 'AwaitExpression';
+                node.argument = clone;
+                changed = true;
+            }
+        }
+    }
+}
+
 export function transformEqualityChecks(ast: any): void {
     const baseVisitor = { ...walk.base, LineComment: () => {} };
     walk.simple(
         ast,
         {
             BinaryExpression(node: any) {
-                // Check if this is an equality operator
+                // Transform equality/inequality operators to na-aware versions.
+                // In Pine Script, any comparison with na returns false:
+                //   na == na → false,  na != na → false
+                //   1 == na  → false,  1 != na  → false
+                // JavaScript's != treats NaN specially (NaN != x is always true),
+                // so we route through math.__eq / math.__neq which check for NaN
+                // and return false when either operand is na.
                 if (node.operator === '==' || node.operator === '===') {
-                    // Store the original operands
-                    const leftOperand = node.left;
-                    const rightOperand = node.right;
-
-                    // Transform the BinaryExpression into a CallExpression
-                    const callExpr = ASTFactory.createMathEqCall(leftOperand, rightOperand);
+                    const callExpr = ASTFactory.createMathEqCall(node.left, node.right);
                     callExpr._transformed = true;
-
+                    Object.assign(node, callExpr);
+                } else if (node.operator === '!=' || node.operator === '!==') {
+                    const callExpr = ASTFactory.createMathNeqCall(node.left, node.right);
+                    callExpr._transformed = true;
                     Object.assign(node, callExpr);
                 }
             },
@@ -101,7 +249,24 @@ export function runTransformationPass(
             node.body = newBody;
             // state.popScope();
         },
-        ReturnStatement(node: any, state: ScopeManager) {
+        ReturnStatement(node: any, state: ScopeManager, c: any) {
+            // Walk into return argument for types not handled by transformReturnStatement.
+            // transformReturnStatement has two handling phases:
+            //   Phase 1 (always): ArrayExpression, ObjectExpression, Identifier, MemberExpression
+            //   Phase 2 (curScope==='fn' only): BinaryExpression, LogicalExpression,
+            //     ConditionalExpression, CallExpression — uses its own walk.recursive
+            // When curScope !== 'fn' (e.g. return inside if/else within a function),
+            // Phase 2 is skipped and complex expression types go untransformed.
+            // We call c() to walk those cases, but ONLY when Phase 2 won't run,
+            // to avoid double-transformation.
+            if (node.argument &&
+                node.argument.type !== 'ArrayExpression' &&
+                node.argument.type !== 'ObjectExpression' &&
+                node.argument.type !== 'Identifier' &&
+                node.argument.type !== 'MemberExpression' &&
+                state.getCurrentScopeType() !== 'fn') {
+                c(node.argument, state);
+            }
             transformReturnStatement(node, state);
         },
         VariableDeclaration(node: any, state: ScopeManager) {

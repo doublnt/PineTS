@@ -353,25 +353,33 @@ export class Parser {
         // Check for generic parameters: array<float>, map<string, float>
         if (this.match(TokenType.OPERATOR, '<')) {
             this.advance(); // consume '<'
-            
+
             const typeArgs = [];
-            
+
             // Parse first type argument (recursive for nested generics)
             typeArgs.push(this.parseTypeExpression());
-            
+
             // Parse additional type arguments (for map<K, V>)
             while (this.match(TokenType.COMMA)) {
                 this.advance();
                 this.skipNewlines();
                 typeArgs.push(this.parseTypeExpression());
             }
-            
+
             this.expect(TokenType.OPERATOR, '>'); // consume '>'
-            
+
             // Return as string representation: "array<float>"
             return baseType + '<' + typeArgs.join(', ') + '>';
         }
-        
+
+        // Handle shorthand array syntax: int[] or int [] (with optional space)
+        // Pine Script allows both `int[]` and `int []` as array type notation
+        if (this.match(TokenType.LBRACKET) && this.peek(1).type === TokenType.RBRACKET) {
+            this.advance(); // consume '['
+            this.advance(); // consume ']'
+            return 'array<' + baseType + '>';
+        }
+
         return baseType; // Simple type: "float", "int", etc.
     }
 
@@ -549,7 +557,24 @@ export class Parser {
             id.varType = varType;
         }
 
-        return new VariableDeclaration([new VariableDeclarator(id, init, varType)], kind);
+        const declarators = [new VariableDeclarator(id, init, varType)];
+
+        // Handle comma-separated var declarations on the same line:
+        //   var int dir = na, var int x1 = na, var float y1 = na
+        // Each segment after the comma is a full "var type name = expr".
+        while (
+            this.match(TokenType.COMMA) &&
+            this.peek(1).type === TokenType.KEYWORD &&
+            (this.peek(1).value === 'var' || this.peek(1).value === 'varip')
+        ) {
+            this.advance(); // consume ','
+            // Recursively parse the next "var type name = expr" segment
+            const extraDecl = this.parseVarDeclaration();
+            // Merge declarators from the recursively parsed declaration
+            declarators.push(...extraDecl.declarations);
+        }
+
+        return new VariableDeclaration(declarators, kind);
     }
 
     // Lookahead to detect typed variable declaration patterns:
@@ -712,6 +737,16 @@ export class Parser {
                 paramType = paramType ? paramType + ' ' + genericType : genericType;
             }
 
+            // Handle array shorthand: int[], float[], line[], label[], etc.
+            if (
+                this.peek().type === TokenType.IDENTIFIER &&
+                this.peek(1).type === TokenType.LBRACKET &&
+                this.peek(2).type === TokenType.RBRACKET
+            ) {
+                const arrayType = this.parseTypeExpression();
+                paramType = paramType ? paramType + ' ' + arrayType : arrayType;
+            }
+
             const paramName = this.expect(TokenType.IDENTIFIER).value;
             const param = new Identifier(paramName);
             if (paramType) param.varType = paramType;
@@ -781,6 +816,16 @@ export class Parser {
             ) {
                 const genericType = this.parseTypeExpression();
                 paramType = paramType ? paramType + ' ' + genericType : genericType;
+            }
+
+            // Handle array shorthand: int[], float[], line[], label[], etc.
+            if (
+                this.peek().type === TokenType.IDENTIFIER &&
+                this.peek(1).type === TokenType.LBRACKET &&
+                this.peek(2).type === TokenType.RBRACKET
+            ) {
+                const arrayType = this.parseTypeExpression();
+                paramType = paramType ? paramType + ' ' + arrayType : arrayType;
             }
 
             const paramName = this.expect(TokenType.IDENTIFIER).value;
@@ -921,8 +966,41 @@ export class Parser {
 
         // Check for typed variable declaration (series float x = ...)
         // Also handles: type[] name = ... and type<generic> name = ...
+        // Also handles comma-separated typed declarations: float num = 1.0, float den = 1.0
         if (this.peek().type === TokenType.IDENTIFIER && this.isTypedVarDeclaration()) {
-            return this.parseTypedVarDeclaration();
+            const firstDecl = this.parseTypedVarDeclaration();
+
+            // Check for comma-separated typed declarations on the same line
+            if (this.match(TokenType.COMMA) && this.peek(1).type === TokenType.IDENTIFIER) {
+                const declarations: any[] = [firstDecl];
+                while (this.match(TokenType.COMMA)) {
+                    this.advance(); // consume comma
+                    this.skipNewlines(true);
+                    if (this.peek().type === TokenType.IDENTIFIER && this.isTypedVarDeclaration()) {
+                        declarations.push(this.parseTypedVarDeclaration());
+                    } else {
+                        // Not a typed declaration after comma — parse as a regular statement
+                        const expr = this.parseExpression();
+                        if (this.match(TokenType.OPERATOR)) {
+                            const op = this.peek().value;
+                            if (['=', ':='].includes(op)) {
+                                this.advance();
+                                this.skipNewlines(true);
+                                const right = this.parseExpression();
+                                if (op === '=' && expr.type === 'Identifier') {
+                                    declarations.push(new VariableDeclaration([new VariableDeclarator(expr, right)], VariableDeclarationKind.LET));
+                                } else {
+                                    declarations.push(new ExpressionStatement(new AssignmentExpression(op === ':=' ? '=' : op, expr, right)));
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+                return declarations; // Return array of statements
+            }
+
+            return firstDecl;
         }
 
         // Try to parse as sequence (assignment, assignment, ..., expression)
@@ -1374,17 +1452,25 @@ export class Parser {
             // We'll skip them in specific contexts where they're allowed (like after `.`)
 
             // Generic type parameters followed by call: array.new<float>(...)
-            // We need to skip the generic part and parse the call
+            // Capture the generic type and, for known types, rewrite
+            // array.new<float> → array.new_float (same for matrix, etc.)
             if (this.match(TokenType.OPERATOR, '<')) {
                 // Save position in case this isn't a generic
                 const saved = this.pos;
 
-                // Try to parse as generic type
+                // Try to parse as generic type, capturing type name
                 this.advance(); // consume <
                 let depth = 1;
                 let isGeneric = true;
+                let genericType = '';
 
-                // Skip until matching >
+                // Known Pine types that have dedicated new_TYPE methods
+                const KNOWN_GENERIC_TYPES = new Set([
+                    'float', 'int', 'string', 'bool', 'color',
+                    'line', 'label', 'box', 'linefill', 'table',
+                ]);
+
+                // Skip until matching >, capturing type identifiers
                 while (depth > 0 && !this.match(TokenType.EOF)) {
                     if (this.match(TokenType.OPERATOR, '<')) {
                         depth++;
@@ -1393,6 +1479,10 @@ export class Parser {
                         depth--;
                         this.advance();
                     } else if (this.match(TokenType.IDENTIFIER) || this.match(TokenType.COMMA) || this.match(TokenType.DOT)) {
+                        // Capture only top-level, simple type names (depth === 1)
+                        if (depth === 1 && this.match(TokenType.IDENTIFIER) && genericType === '') {
+                            genericType = this.peek().value;
+                        }
                         this.advance();
                     } else {
                         // Not a generic type, restore position
@@ -1400,6 +1490,15 @@ export class Parser {
                         this.pos = saved;
                         break;
                     }
+                }
+
+                // For known types, rewrite callee: array.new<float> → array.new_float
+                // Only for array/matrix (not map, which uses map.new<K,V> with two type params)
+                if (isGeneric && expr.type === 'MemberExpression'
+                    && expr.property.name === 'new'
+                    && (expr.object.name === 'array' || expr.object.name === 'matrix')
+                    && KNOWN_GENERIC_TYPES.has(genericType)) {
+                    expr.property = new Identifier('new_' + genericType);
                 }
 
                 // If we successfully parsed generic and next is (, parse call
@@ -1422,11 +1521,24 @@ export class Parser {
             else if (this.match(TokenType.DOT)) {
                 this.advance();
                 this.skipNewlines(); // Allow method chaining across lines
-                const property = this.expect(TokenType.IDENTIFIER).value;
-                expr = new MemberExpression(expr, new Identifier(property), false);
+                // Accept both IDENTIFIER and KEYWORD after DOT — keywords like
+                // 'type' can be valid property names (e.g., syminfo.type)
+                const propToken = this.peek();
+                if (propToken.type !== TokenType.IDENTIFIER && propToken.type !== TokenType.KEYWORD) {
+                    throw new Error(`Expected property name but got ${propToken.type} at ${propToken.line}:${propToken.column}`);
+                }
+                this.advance();
+                expr = new MemberExpression(expr, new Identifier(propToken.value), false);
             }
             // Index/history operator
             else if (this.match(TokenType.LBRACKET)) {
+                // If this looks like tuple destructuring [a, b, c] = ..., it's a new
+                // statement, not a postfix index on the previous expression.
+                // This happens after block expressions like switch where DEDENT is
+                // immediately followed by LBRACKET with no intervening NEWLINE.
+                if (this.isTupleDestructuring()) {
+                    break;
+                }
                 this.advance();
                 this.skipNewlines();
                 const index = this.parseExpression();

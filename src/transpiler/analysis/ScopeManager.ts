@@ -61,6 +61,7 @@ export class ScopeManager {
     private suppressHoisting: boolean = false;
     private reservedNames: Set<string> = new Set();
     private userFunctions: Set<string> = new Set();
+    private userMethods: Set<string> = new Set();
 
     public get nextParamIdArg(): any {
         return {
@@ -203,6 +204,14 @@ export class ScopeManager {
         return this.userFunctions.has(name);
     }
 
+    addUserMethod(name: string): void {
+        this.userMethods.add(name);
+    }
+
+    isUserMethod(name: string): boolean {
+        return this.userMethods.has(name);
+    }
+
     addVariable(name: string, kind: string): string {
         // Regular variable handling
         if (this.isContextBound(name)) {
@@ -240,6 +249,29 @@ export class ScopeManager {
             }
         }
         return [name, 'let'];
+    }
+
+    /**
+     * Check if a variable (by original name) lives inside a function scope.
+     * Walks the scope stack to find which scope owns the variable, then checks
+     * whether any scope from the root up to (and including) that level is a
+     * function scope ('fn').  This allows nested scopes (if, else, for, while)
+     * inside functions to be correctly treated as function-local.
+     */
+    isVariableInFunctionScope(name: string): boolean {
+        for (let i = this.scopes.length - 1; i >= 0; i--) {
+            if (this.scopes[i].has(name)) {
+                // Variable found at scope level i.
+                // Check if any scope from root to i is a function scope.
+                for (let j = 0; j <= i; j++) {
+                    if (this.scopeTypes[j] === 'fn') {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+        return false;
     }
 
     public generateTempVar(): string {

@@ -60,14 +60,14 @@ const PLOT_ARGS_TYPES = {
 //prettier-ignore
 const PLOT_SHAPE_ARGS_TYPES = {
     series: 'series', title: 'string', style: 'string', location: 'string',
-    color: 'string', offset: 'number', text: 'string', textcolor: 'string',
+    color: 'color', offset: 'number', text: 'string', textcolor: 'color',
     editable: 'boolean', size: 'string', show_last: 'number', display: 'string',
     format: 'string', precision: 'number', force_overlay: 'boolean',
 };
 
 //prettier-ignore
 const PLOT_ARROW_ARGS_TYPES = {
-    series: 'series', title: 'string', colorup: 'string', colordown: 'string',
+    series: 'series', title: 'string', colorup: 'color', colordown: 'color',
     offset: 'number', minheight: 'number', maxheight: 'number',
     editable: 'boolean', show_last: 'number', display: 'string',
     format: 'string', precision: 'number', force_overlay: 'boolean',
@@ -76,39 +76,39 @@ const PLOT_ARROW_ARGS_TYPES = {
 //prettier-ignore
 const PLOTBAR_ARGS_TYPES = {
     open: 'series', high: 'series', low: 'series', close: 'series',
-    title: 'string', color: 'string', editable: 'boolean', show_last: 'number', display: 'string',
+    title: 'string', color: 'color', editable: 'boolean', show_last: 'number', display: 'string',
     format: 'string', precision: 'number', force_overlay: 'boolean',
 };
 
 //prettier-ignore
 const PLOTCANDLE_ARGS_TYPES = {
     open: 'series', high: 'series', low: 'series', close: 'series',
-    title: 'string', color: 'string', wickcolor: 'string', bordercolor: 'string',
+    title: 'string', color: 'color', wickcolor: 'color', bordercolor: 'color',
     editable: 'boolean', show_last: 'number', display: 'string',
     format: 'string', precision: 'number', force_overlay: 'boolean',
 };
 
 //prettier-ignore
 const BGCOLOR_ARGS_TYPES = {
-    color: 'string', offset: 'number', editable: 'boolean', show_last: 'number',
+    color: 'color', offset: 'number', editable: 'boolean', show_last: 'number',
     title: 'string', display: 'string', force_overlay: 'boolean',
 };
 
 //prettier-ignore
 const BARCOLOR_ARGS_TYPES = {
-    color: 'string', offset: 'number', editable: 'boolean', show_last: 'number',
+    color: 'color', offset: 'number', editable: 'boolean', show_last: 'number',
     title: 'string', display: 'string',
 };
 
 //prettier-ignore
 const HLINE_ARGS_TYPES = {
-    price: 'series', title: 'string', color: 'string', linestyle: 'string', linewidth: 'number',
+    price: 'series', title: 'string', color: 'color', linestyle: 'string', linewidth: 'number',
     editable: 'boolean', display: 'string'
 };
 
 //prettier-ignore
 const FILL_ARGS_TYPES = {
-    plot1: 'object', plot2: 'object', color: 'string', title: 'string', editable: 'boolean', show_last: 'number', fillgaps: 'boolean', display: 'string',
+    plot1: 'object', plot2: 'object', color: 'color', title: 'string', editable: 'boolean', show_last: 'number', fillgaps: 'boolean', display: 'string',
 };
 
 export class PlotHelper {
@@ -500,6 +500,10 @@ export class FillHelper {
                 fillKey = callsiteId;
             }
 
+            // Resolve the color for this bar.
+            // The color may be a Series, a param tuple [value, name], or a plain string.
+            const resolvedColor = Series.from(color).get(0);
+
             if (!this.context.plots[fillKey]) {
                 const p1Key = plot1?._plotKey || plot1?.title;
                 const p2Key = plot2?._plotKey || plot2?.title;
@@ -507,15 +511,24 @@ export class FillHelper {
                     title: title || 'Fill',
                     plot1: p1Key,
                     plot2: p2Key,
+                    data: [],
                     options: {
                         plot1: p1Key,
                         plot2: p2Key,
-                        color, editable, show_last, fillgaps, display, style: 'fill',
+                        color: resolvedColor, editable, show_last, fillgaps, display, style: 'fill',
                     },
                     _plotKey: fillKey,
                     _callsiteId: callsiteId,
                 };
             }
+
+            // Always push per-bar color data so dynamic colors (e.g. green/red flip) work.
+            // The fill renderer will use per-bar colors when the data array is populated.
+            this.context.plots[fillKey].data.push({
+                time: this.context.marketData[this.context.idx].openTime,
+                value: null,
+                options: { color: resolvedColor },
+            });
         }
     }
 }

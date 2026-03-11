@@ -87,10 +87,16 @@ export class TableObject {
 
         const existing = this.cells[row][column];
         if (existing && existing._merged && existing._merge_parent) {
-            // Redirect to merge parent
+            // Redirect to merge parent (guard against self-reference to prevent infinite recursion)
             const [pc, pr] = existing._merge_parent;
-            this.setCell(pc, pr, props);
-            return;
+            if (pc === column && pr === row) {
+                // Self-referencing merge parent — clear the flag and write directly
+                existing._merged = false;
+                existing._merge_parent = undefined;
+            } else {
+                this.setCell(pc, pr, props);
+                return;
+            }
         }
 
         const cell = existing || this._defaultCell();
