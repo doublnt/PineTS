@@ -8,6 +8,9 @@ function isPlot(arg: any) {
 const TYPE_CHECK = {
     series: (arg) => arg instanceof Series || typeof arg === 'number' || typeof arg === 'string' || typeof arg === 'boolean',
     string: (arg) => typeof arg === 'string',
+    // Pine Script color params accept both color strings and `na` (NaN).
+    // Using 'color' instead of 'string' prevents NaN from invalidating the signature.
+    color: (arg) => typeof arg === 'string' || (typeof arg === 'number' && isNaN(arg)),
     number: (arg) => typeof arg === 'number',
     boolean: (arg) => typeof arg === 'boolean',
     array: (arg) => Array.isArray(arg),
@@ -83,14 +86,27 @@ export function parseArgsForPineParams<T>(args: any[], signatures: any[], types:
                 continue;
             }
 
-            const typeChecker = TYPE_CHECK[types[optionName]];
-            if (typeof typeChecker === 'function' && typeChecker(arg)) {
+            // NaN represents Pine Script's `na` — accept it for numeric and color
+            // parameters (where na is a valid "no value"). For string/boolean/point
+            // parameters, NaN should invalidate the signature to prevent multi-sig
+            // conflicts (e.g., line.new(na,na,na,na) where sig2 maps pos 2 to xloc).
+            const expectedType = types[optionName];
+            if (typeof arg === 'number' && isNaN(arg) && (expectedType === 'number' || expectedType === 'series')) {
                 options[optionName] = arg;
             } else {
-                valid[o] = false;
+                const typeChecker = TYPE_CHECK[types[optionName]];
+                if (typeof typeChecker === 'function' && typeChecker(arg)) {
+                    options[optionName] = arg;
+                } else {
+                    valid[o] = false;
+                }
             }
         }
     }
 
-    return { ...options_arg, ...options, ...override };
+    // Named args (options_arg) take precedence over positional matches (options).
+    // Without this order, multi-signature matching can produce spurious positional
+    // entries (e.g., NaN at position 2 matching 'border_color' in a secondary
+    // signature) that overwrite explicit named arguments.
+    return { ...options, ...options_arg, ...override };
 }

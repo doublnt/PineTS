@@ -6,6 +6,24 @@ import { TIMEFRAMES, normalizeTimeframe } from '../utils/TIMEFRAMES';
 import { findSecContextIdx } from '../utils/findSecContextIdx';
 import { findLTFContextIdx } from '../utils/findLTFContextIdx';
 
+/**
+ * Resolve raw expression values that may contain helper objects
+ * (TimeComponentHelper, TimeHelper, NAHelper, Series, etc.)
+ * into their primitive values.  This is needed for same-timeframe
+ * and secondary-context shortcuts where the expression isn't
+ * re-evaluated through a full secondary run.
+ */
+function resolveExprValue(v: any): any {
+    if (v == null || typeof v !== 'object') return v;
+    // TimeComponentHelper, TimeHelper, NAHelper — expose __value
+    if ('__value' in v) return v.__value;
+    // Series — get current value
+    if (v instanceof Series) return v.get(0);
+    // Tuple array — resolve each element
+    if (Array.isArray(v)) return v.map(resolveExprValue);
+    return v;
+}
+
 export function security(context: any) {
     return async (
         symbol: any,
@@ -19,9 +37,13 @@ export function security(context: any) {
     ) => {
         // Strip exchange prefix (e.g. "BINANCE:BTCUSDC" → "BTCUSDC") so the
         // provider receives a clean ticker when creating a secondary context.
-        const rawSymbol = symbol[0];
-        const _symbol = typeof rawSymbol === 'string' && rawSymbol.includes(':') ? rawSymbol.split(':')[1] : rawSymbol;
-        const _timeframe = timeframe[0];
+        const rawSymbol = symbol[0] instanceof Series ? (symbol[0] as Series).get(0) : symbol[0];
+        // Empty string "" means "use chart's symbol" (Pine Script spec)
+        const resolvedSymbol = rawSymbol === '' ? context.tickerId : rawSymbol;
+        const _symbol = typeof resolvedSymbol === 'string' && resolvedSymbol.includes(':') ? resolvedSymbol.split(':')[1] : resolvedSymbol;
+        const rawTimeframe = timeframe[0] instanceof Series ? (timeframe[0] as Series).get(0) : timeframe[0];
+        // Empty string "" means "use chart's timeframe" (Pine Script spec)
+        const _timeframe = rawTimeframe === '' ? context.timeframe : (typeof rawTimeframe === 'string' ? rawTimeframe : String(rawTimeframe ?? ''));
         const _expression = expression[0];
         const _expression_name = expression[1];
         const _gapsRaw = Array.isArray(gaps) ? gaps[0] : gaps;
@@ -35,7 +57,8 @@ export function security(context: any) {
         // If this is a secondary context (created by another request.security),
         // just return the expression value directly without creating another context
         if (context.isSecondaryContext) {
-            return Array.isArray(_expression) ? [_expression] : _expression;
+            const resolved = resolveExprValue(_expression);
+            return Array.isArray(resolved) ? [resolved] : resolved;
         }
 
         const ctxTimeframeIdx = TIMEFRAMES.indexOf(normalizeTimeframe(context.timeframe));
@@ -46,9 +69,11 @@ export function security(context: any) {
         }
 
         if (ctxTimeframeIdx === reqTimeframeIdx) {
-            // Wrap tuples in 2D array to match $.precision() convention
-            // (same wrapping as HTF/LTF return paths below)
-            return Array.isArray(_expression) ? [_expression] : _expression;
+            // Same-timeframe shortcut: resolve any helper objects (TimeComponentHelper,
+            // NAHelper, Series, etc.) in the expression that haven't been extracted
+            // to their primitive values yet.
+            const resolved = resolveExprValue(_expression);
+            return Array.isArray(resolved) ? [resolved] : resolved;
         }
 
         const isLTF = ctxTimeframeIdx > reqTimeframeIdx;
