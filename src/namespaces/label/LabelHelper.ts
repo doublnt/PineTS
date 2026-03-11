@@ -161,58 +161,56 @@ export class LabelHelper {
     }
 
     // --- Setter methods ---
-    // All setters call _resolve() to handle Series/function values that the
-    // transpiler may pass in (e.g., bound chart properties or color functions).
 
     set_x(id: LabelObject, x: number): void {
-        if (id && !id._deleted) id.x = this._resolve(x);
+        if (id && !id._deleted) id.x = x;
     }
 
     set_y(id: LabelObject, y: number): void {
-        if (id && !id._deleted) id.y = this._resolve(y);
+        if (id && !id._deleted) id.y = y;
     }
 
     set_xy(id: LabelObject, x: number, y: number): void {
         if (id && !id._deleted) {
-            id.x = this._resolve(x);
-            id.y = this._resolve(y);
+            id.x = x;
+            id.y = y;
         }
     }
 
     set_text(id: LabelObject, text: string): void {
-        if (id && !id._deleted) id.text = this._resolve(text);
+        if (id && !id._deleted) id.text = text;
     }
 
     set_color(id: LabelObject, color: string): void {
-        if (id && !id._deleted) id.color = this._resolve(color);
+        if (id && !id._deleted) id.color = color;
     }
 
     set_textcolor(id: LabelObject, textcolor: string): void {
-        if (id && !id._deleted) id.textcolor = this._resolve(textcolor);
+        if (id && !id._deleted) id.textcolor = textcolor;
     }
 
     set_size(id: LabelObject, size: string): void {
-        if (id && !id._deleted) id.size = this._resolve(size);
+        if (id && !id._deleted) id.size = size;
     }
 
     set_style(id: LabelObject, style: string): void {
-        if (id && !id._deleted) id.style = this._resolve(style);
+        if (id && !id._deleted) id.style = style;
     }
 
     set_textalign(id: LabelObject, textalign: string): void {
-        if (id && !id._deleted) id.textalign = this._resolve(textalign);
+        if (id && !id._deleted) id.textalign = textalign;
     }
 
     set_tooltip(id: LabelObject, tooltip: string): void {
-        if (id && !id._deleted) id.tooltip = this._resolve(tooltip);
+        if (id && !id._deleted) id.tooltip = tooltip;
     }
 
     set_xloc(id: LabelObject, xloc: string): void {
-        if (id && !id._deleted) id.xloc = this._resolve(xloc);
+        if (id && !id._deleted) id.xloc = xloc;
     }
 
     set_yloc(id: LabelObject, yloc: string): void {
-        if (id && !id._deleted) id.yloc = this._resolve(yloc);
+        if (id && !id._deleted) id.yloc = yloc;
     }
 
     set_point(id: LabelObject, point: ChartPointObject): void {

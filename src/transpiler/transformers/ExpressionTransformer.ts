@@ -974,8 +974,8 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
             // Only transform if the variable has been renamed (i.e., it's a user-defined variable)
             // Context-bound variables that are NOT renamed (like 'display', 'ta', 'input') should NOT be transformed
             if (isRenamed && !scopeManager.isLoopVariable(name)) {
-                // Transform object to $.get($.let.varName, 0)
-                const contextVarRef = ASTFactory.createContextVariableReference(kind, varName);
+                // Transform object to $.get($.let.varName, 0) or $$.get($$.let.varName, 0) for function scope
+                const contextVarRef = createScopedVariableReference(name, scopeManager);
                 const getCall = ASTFactory.createGetCall(contextVarRef, 0);
                 arg.object = getCall;
             }
@@ -1108,9 +1108,14 @@ function hasGetCallInChain(node: any): boolean {
     if (!node) return false;
     if (isDirectGetCall(node)) return true;
     if (node.type === 'MemberExpression') return hasGetCallInChain(node.object);
+    // Traverse through ChainExpression wrappers created by earlier optional chaining passes
+    if (node.type === 'ChainExpression') return hasGetCallInChain(node.expression);
     // Traverse through intermediate CallExpression nodes (e.g. aEW.get(0).b5.method())
-    if (node.type === 'CallExpression' && node.callee?.type === 'MemberExpression') {
-        return hasGetCallInChain(node.callee.object);
+    if (node.type === 'CallExpression') {
+        const callee = node.callee;
+        if (callee?.type === 'MemberExpression') return hasGetCallInChain(callee.object);
+        // Callee may already be wrapped in ChainExpression by a prior pass
+        if (callee?.type === 'ChainExpression') return hasGetCallInChain(callee.expression);
     }
     return false;
 }
@@ -1499,15 +1504,34 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
     //
     // NOTE: This must run AFTER argument transformation so that the callee is
     // still a MemberExpression when argument type checks inspect it.
+    //
+    // CRITICAL — DO NOT broaden this condition to `hasGetCallInChain(node.callee)`.
+    // That matches intermediate calls (e.g. `$.get(arr,0).get(0)` in
+    // `arr.get(0).field.method()`) instead of the LEAF method call. Once an
+    // intermediate call is wrapped in ChainExpression, the leaf call can no
+    // longer find $.get() in its chain and misses optional chaining entirely.
+    // The two cases below are intentionally separated:
+    //   Case 1: callee.object IS the $.get() call directly  (direct pattern)
+    //   Case 2: callee.object is a MemberExpression with $.get() deeper in chain (chained pattern)
     // ---------------------------------------------------------------------------
-    if (node.callee && node.callee.type === 'MemberExpression' && hasGetCallInChain(node.callee)) {
-        // Double optional chaining: obj?.method?.()
-        // The node stays as a CallExpression (safe for AST walkers) but gets:
-        //   1. optional: true on the CallExpression  → produces ?.()
-        //   2. optional: true on the MemberExpression → produces ?.method
-        //   3. callee wrapped in ChainExpression      → groups the chain for astring
-        const innerCallee = Object.assign({}, node.callee, { optional: true });
-        node.callee = { type: 'ChainExpression', expression: innerCallee };
-        node.optional = true;
+    if (node.callee && node.callee.type === 'MemberExpression') {
+        const calleeObj = node.callee.object;
+        // Case 1 — Direct: $.get(X, N).method()
+        //   callee.object is the $.get() CallExpression itself
+        const isDirect = isDirectGetCall(calleeObj);
+        // Case 2 — Chained: $.get(X, N).field.method()
+        //   callee.object is a MemberExpression (the .field access), with $.get() deeper
+        const isChained = calleeObj?.type === 'MemberExpression' && hasGetCallInChain(calleeObj);
+
+        if (isDirect || isChained) {
+            // Double optional chaining: obj?.method?.()
+            // The node stays as a CallExpression (safe for AST walkers) but gets:
+            //   1. optional: true on the CallExpression  → produces ?.()
+            //   2. optional: true on the MemberExpression → produces ?.method
+            //   3. callee wrapped in ChainExpression      → groups the chain for astring
+            const innerCallee = Object.assign({}, node.callee, { optional: true });
+            node.callee = { type: 'ChainExpression', expression: innerCallee };
+            node.optional = true;
+        }
     }
 }
