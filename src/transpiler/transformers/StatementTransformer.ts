@@ -972,6 +972,40 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                     // Otherwise, transform it normally
                     transformMemberExpression(element, '', scopeManager);
                     return element;
+                } else if (
+                    element.type === 'BinaryExpression' ||
+                    element.type === 'LogicalExpression' ||
+                    element.type === 'ConditionalExpression' ||
+                    element.type === 'CallExpression' ||
+                    element.type === 'UnaryExpression'
+                ) {
+                    // Walk into complex expressions and transform identifiers/members
+                    walk.recursive(element, scopeManager, {
+                        Identifier(node: any, state: ScopeManager) {
+                            transformIdentifier(node, state);
+                            if (node.type === 'Identifier' && !node._arrayAccessed) {
+                                addArrayAccess(node, state);
+                                node._arrayAccessed = true;
+                            }
+                        },
+                        MemberExpression(node: any) {
+                            transformMemberExpression(node, '', scopeManager);
+                        },
+                        CallExpression(node: any, state: ScopeManager, c: any) {
+                            if (node.callee.type === 'ArrowFunctionExpression' || node.callee.type === 'FunctionExpression') {
+                                c(node.callee, state);
+                            }
+                            transformCallExpression(node, state);
+                            if (node.type === 'CallExpression') {
+                                node.arguments.forEach((arg: any) => c(arg, state));
+                            }
+                        },
+                        BinaryExpression(node: any, state: any, c: any) {
+                            c(node.left, state);
+                            c(node.right, state);
+                        },
+                    });
+                    return element;
                 }
                 return element;
             });

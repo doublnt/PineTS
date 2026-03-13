@@ -1795,3 +1795,93 @@ plot(signal, title="Signal", color=color.orange)
         expect(jsCode).toContain('$.let.glb1_hist');
     });
 });
+
+describe('Pine Script Transpilation - Tuple Return in Functions', () => {
+    it('should transform all variable references in tuple return with complex expressions', () => {
+        const code = `
+//@version=5
+indicator("Tuple Return Test")
+
+myBands(src, len, mult) =>
+    float _mid = ta.sma(src, len)
+    float _dev = ta.stdev(src, len)
+    [_mid, _mid + _dev * mult, _mid - _dev * mult]
+
+[mid, upper, lower] = myBands(close, 20, 2.0)
+plot(mid)
+        `;
+
+        const result = transpile(code);
+        const jsCode = result.toString();
+
+        // Extract the return statement from inside the function
+        const returnMatch = jsCode.match(/return \$\.precision\(\[\[(.+?)\]\]\)/);
+        expect(returnMatch).toBeTruthy();
+        const tupleContent = returnMatch![1];
+
+        // The return line must NOT contain bare _mid or _dev identifiers (only scoped $$.let.fn..._mid)
+        expect(tupleContent).not.toMatch(/(?<!\w)_mid\b/);
+        expect(tupleContent).not.toMatch(/(?<!\w)_dev\b/);
+
+        // All variable references should be resolved via $.get()
+        // 3 for _mid + 2 for _dev + 1 for mult = 6 $.get() calls
+        const getCallCount = (tupleContent.match(/\$\.get\(/g) || []).length;
+        expect(getCallCount).toBeGreaterThanOrEqual(5);
+
+        // Verify scoped variable names appear in $.get calls
+        expect(tupleContent).toContain('$.get($$.let.fn');
+    });
+
+    it('should transform unary expressions in tuple return', () => {
+        const code = `
+//@version=5
+indicator("Tuple Unary Test")
+
+myFunc(src, len) =>
+    float _val = ta.sma(src, len)
+    [_val, -_val]
+
+[pos, neg] = myFunc(close, 20)
+plot(pos)
+        `;
+
+        const result = transpile(code);
+        const jsCode = result.toString();
+
+        // Extract the return statement
+        const returnMatch = jsCode.match(/return \$\.precision\(\[\[(.+?)\]\]\)/);
+        expect(returnMatch).toBeTruthy();
+        const tupleContent = returnMatch![1];
+
+        // The negated element should NOT have bare _val, must use $.get on the resolved variable
+        expect(tupleContent).not.toMatch(/(?<!\w)_val\b/);
+        expect(tupleContent).toContain('-$.get($$');
+    });
+
+    it('should transform call expressions in tuple return', () => {
+        const code = `
+//@version=5
+indicator("Tuple Call Test")
+
+myFunc(src, len) =>
+    float _sma = ta.sma(src, len)
+    float _ema = ta.ema(src, len)
+    [_sma, math.abs(_sma - _ema)]
+
+[sma_val, diff] = myFunc(close, 20)
+plot(sma_val)
+        `;
+
+        const result = transpile(code);
+        const jsCode = result.toString();
+
+        // Extract the return statement
+        const returnMatch = jsCode.match(/return \$\.precision\(\[\[(.+?)\]\]\)/);
+        expect(returnMatch).toBeTruthy();
+        const tupleContent = returnMatch![1];
+
+        // No bare _sma or _ema in the return — all resolved via $.get
+        expect(tupleContent).not.toMatch(/(?<!\w)_sma\b/);
+        expect(tupleContent).not.toMatch(/(?<!\w)_ema\b/);
+    });
+});

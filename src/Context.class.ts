@@ -703,7 +703,7 @@ export class Context {
      */
     set(target: any, value: any) {
         if (target instanceof Series) {
-            target.set(0, value);
+            target.set(0, typeof value === 'number' ? this.precision(value) : value);
             return;
         }
 

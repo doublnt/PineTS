@@ -101,6 +101,7 @@ describe('Transpiler', () => {
   if (temp_1) {
     $.set($.let.glb1_n_a, $.get(close, 0));
   }
+  ;
   return {
     open,
     close: close,
@@ -742,33 +743,43 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     $.let.if2_cc3 = $.init($.let.if2_cc3, $.get($.const.glb1__cc, $.get($.let.glb1_aa, 99)));
     $.set($.let.glb1_aa, 1);
   }
+  ;
   if ($.get($.const.glb1__cc, 0) > 1) {
     $.set($.let.glb1_aa, 2);
   }
+  ;
   if ($.get($.const.glb1__cc, 1) > 1) {
     $.set($.let.glb1_aa, 3);
   }
+  ;
   if ($.get($.const.glb1__cc, $.get($.let.glb1_aa, 0)) > 1) {
     $.set($.let.glb1_aa, 3);
   }
+  ;
   if ($.get($.const.glb1__cc, $.let.glb1_aa[0]) > 1) {
     $.set($.let.glb1_aa, 3);
   }
+  ;
   if ($.get($.const.glb1__cc, $.let.glb1_aa[1]) > 1) {
     $.set($.let.glb1_aa, 3);
   }
+  ;
   if ($.get(close, 0) > 1) {
     $.set($.let.glb1_aa, 4);
   }
+  ;
   if ($.get(close, 0) > 1) {
     $.set($.let.glb1_aa, 5);
   }
+  ;
   if ($.get(close, 1) > 1) {
     $.set($.let.glb1_aa, 6);
   }
+  ;
   if ($.get(close, $.get($.let.glb1_aa, 0)) > 1) {
     $.set($.let.glb1_aa, 6);
   }
+  ;
   if ($.get(close, $.let.glb1_aa[1]) > 1) {
     $.set($.let.glb1_aa, 6);
   }
@@ -867,33 +878,43 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     $.let.for2_cc3 = $.init($.let.for2_cc3, $.get($.let.glb1__cc, $.get($.let.glb1_aa, 99)));
     $.set($.let.glb1_aa, i);
   }
+  ;
   for (let i = 0; i < 10; i++) {
     $.set($.let.glb1_aa, i);
   }
+  ;
   for (let i = 0; i < $.get($.let.glb1_aa, 0); i++) {
     $.set($.let.glb1__cc, $.get($.let.glb1__cc, i));
   }
+  ;
   for (let i = 0; i < $.get($.let.glb1__cc, 0); i++) {
     $.set($.let.glb1_aa, i);
   }
+  ;
   for (let i = 0; i < $.get($.let.glb1__cc, 1); i++) {
     $.set($.let.glb1_aa, i);
   }
+  ;
   for (let i = 0; i < $.get($.let.glb1__cc, $.get($.let.glb1_aa, 0)); i++) {
     $.set($.let.glb1_aa, i);
   }
+  ;
   for (let i = 0; i < $.get($.let.glb1__cc, $.let.glb1_aa[99]); i++) {
     $.set($.let.glb1_aa, i);
   }
+  ;
   for (let i = 0; i < $.get(close, 0); i++) {
     $.set($.let.glb1_aa, i);
   }
+  ;
   for (let i = 0; i < $.get(close, 1); i++) {
     $.set($.let.glb1_aa, i);
   }
+  ;
   for (let i = 0; i < $.get(close, $.get($.let.glb1_aa, 0)); i++) {
     $.set($.let.glb1_aa, i);
   }
+  ;
   for (let i = 0; i < $.get(close, $.let.glb1_aa[99]); i++) {
     $.set($.let.glb1_aa, i);
   }
@@ -992,9 +1013,11 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     for (let i = 1; i <= $.get(avg_len, 0); i++) {
       $.set($$.let.fn2_ret_val, $.get($$.let.fn2_ret_val, 0) + $.get(avg_src, i));
     }
+    ;
     if ($.pine.math.__eq($.get(avg_len, 0), 0)) {
       $.set($$.let.fn2_ret_val, $.get($$.let.fn2_cc, 1));
     }
+    ;
     return $.precision($.get($$.let.fn2_ret_val, 0) / $.get(avg_len, 0));
   }
   const p2 = $.param(close, undefined, 'p2');
@@ -1183,9 +1206,11 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     for (let i = 1; i <= $.get(avg_len, 0); i++) {
       $.set($$.let.fn1_ret_val, $.get($$.let.fn1_ret_val, 0) + $.get(avg_src, i));
     }
+    ;
     if ($.pine.math.__eq($.get(avg_len, 0), 0)) {
       $.set($$.let.fn1_ret_val, $.get($$.let.fn1_cc, 1));
     }
+    ;
     return $.precision($.get($$.let.fn1_ret_val, 0) / $.get(avg_len, 0));
   }
   const p0 = $.param(close, undefined, 'p0');
