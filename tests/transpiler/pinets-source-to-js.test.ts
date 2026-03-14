@@ -34,6 +34,7 @@ describe('Transpiler', () => {
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open, high, low, hlc3, volume} = $.data;
   const {plotchar, color, plot, na, nz} = $.core;
   const ta = $.ta;
@@ -88,6 +89,7 @@ describe('Transpiler', () => {
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open, high, low, hlc3, volume} = $.data;
   const {plotchar, color, plot, na, nz} = $.core;
   const ta = $.ta;
@@ -140,6 +142,7 @@ if (na(n_a)) {
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {open, close} = $.data;
   const {na, nz} = $.pine;
   const ta = $.ta;
@@ -177,6 +180,7 @@ down = ta.rma(-math.min(ta.change(close), 0), 14)`;
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   const {ta, math, indicator} = $.pine;
   const p0 = $.param('RSI Divergence Detector', undefined, 'p0');
@@ -230,6 +234,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {open, close} = $.data;
   const {input} = $.pine;
   const p0 = input.param({
@@ -293,6 +298,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {high, low, close} = $.data;
   const {ta, na} = $.pine;
   const {open} = $.data;
@@ -355,6 +361,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   const ta = $.ta;
   const math = $.math;
@@ -429,6 +436,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   const ta = $.ta;
   const p0 = ta.param(close, undefined, 'p0');
@@ -462,6 +470,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {ta, plot, na, bool} = $.pine;
   $.let.glb1_highUsePivot = $.init($.let.glb1_highUsePivot, 10);
   const p0 = plot.param($.let.glb1_highUsePivot, undefined, 'p0');
@@ -507,6 +516,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   const {ta, fixnan} = $.pine;
   const p0 = ta.param(close, undefined, 'p0');
@@ -557,6 +567,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open} = $.data;
   const ta = $.ta;
   $.const.glb1_green_candle = $.init($.const.glb1_green_candle, $.get(close, 0) > $.get(open, 0));
@@ -596,6 +607,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open} = $.data;
   const ta = $.ta;
   $.const.glb1_green_candle = $.init($.const.glb1_green_candle, $.get(close, 0) > $.get(open, 0) ? 1 : 0);
@@ -631,6 +643,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open} = $.data;
   const {plot} = $.core;
   $.const.glb1_res = $.init($.const.glb1_res, open);
@@ -728,6 +741,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   $.const.glb1__cc = $.init($.const.glb1__cc, close);
   $.let.glb1_aa = $.init($.let.glb1_aa, 0);
@@ -860,10 +874,13 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   $.let.glb1_aa = $.init($.let.glb1_aa, 10);
   $.let.glb1__cc = $.init($.let.glb1__cc, close);
+  let __lg0 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, 1); i++) {
+    if (++__lg0 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg0)");
     $.let.for2_bb = $.init($.let.for2_bb, 1);
     $.let.for2_cc = $.init($.let.for2_cc, close);
     $.set($.let.for2_cc, $.get(close, 1));
@@ -879,43 +896,63 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     $.set($.let.glb1_aa, i);
   }
   ;
+  let __lg1 = 0;
   for (let i = 0; i < 10; i++) {
+    if (++__lg1 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg1)");
     $.set($.let.glb1_aa, i);
   }
   ;
+  let __lg2 = 0;
   for (let i = 0; i < $.get($.let.glb1_aa, 0); i++) {
+    if (++__lg2 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg2)");
     $.set($.let.glb1__cc, $.get($.let.glb1__cc, i));
   }
   ;
+  let __lg3 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, 0); i++) {
+    if (++__lg3 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg3)");
     $.set($.let.glb1_aa, i);
   }
   ;
+  let __lg4 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, 1); i++) {
+    if (++__lg4 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg4)");
     $.set($.let.glb1_aa, i);
   }
   ;
+  let __lg5 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, $.get($.let.glb1_aa, 0)); i++) {
+    if (++__lg5 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg5)");
     $.set($.let.glb1_aa, i);
   }
   ;
+  let __lg6 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, $.let.glb1_aa[99]); i++) {
+    if (++__lg6 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg6)");
     $.set($.let.glb1_aa, i);
   }
   ;
+  let __lg7 = 0;
   for (let i = 0; i < $.get(close, 0); i++) {
+    if (++__lg7 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg7)");
     $.set($.let.glb1_aa, i);
   }
   ;
+  let __lg8 = 0;
   for (let i = 0; i < $.get(close, 1); i++) {
+    if (++__lg8 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg8)");
     $.set($.let.glb1_aa, i);
   }
   ;
+  let __lg9 = 0;
   for (let i = 0; i < $.get(close, $.get($.let.glb1_aa, 0)); i++) {
+    if (++__lg9 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg9)");
     $.set($.let.glb1_aa, i);
   }
   ;
+  let __lg10 = 0;
   for (let i = 0; i < $.get(close, $.let.glb1_aa[99]); i++) {
+    if (++__lg10 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg10)");
     $.set($.let.glb1_aa, i);
   }
 }`;
@@ -980,6 +1017,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   const ta = $.ta;
   const math = $.math;
@@ -1010,7 +1048,9 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     $$.let.fn2_cc2 = $.init($$.let.fn2_cc2, $.get($.const.glb1__cc, $.get($.const.glb1_aa, 0)));
     $$.let.fn2_cc3 = $.init($$.let.fn2_cc3, $.get($.const.glb1__cc, $.get($.const.glb1_aa, 99)));
     $$.let.fn2_ret_val = $.init($$.let.fn2_ret_val, 0);
+    let __lg0 = 0;
     for (let i = 1; i <= $.get(avg_len, 0); i++) {
+      if (++__lg0 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg0)");
       $.set($$.let.fn2_ret_val, $.get($$.let.fn2_ret_val, 0) + $.get(avg_src, i));
     }
     ;
@@ -1062,6 +1102,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {high} = $.data;
   const {open, close} = $.data;
   const {array} = $.pine;
@@ -1107,6 +1148,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open} = $.data;
   const {plot, plotchar, request, ta} = $.pine;
   function foo() {
@@ -1184,6 +1226,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   const ta = $.ta;
   $.const.glb1__cc = $.init($.const.glb1__cc, close);
@@ -1203,7 +1246,9 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     $$.let.fn1_cc2 = $.init($$.let.fn1_cc2, $.get($.const.glb1__cc, $.get($.const.glb1_aa, 0)));
     $$.let.fn1_cc3 = $.init($$.let.fn1_cc3, $.get($.const.glb1__cc, $.get($.const.glb1_aa, 99)));
     $$.let.fn1_ret_val = $.init($$.let.fn1_ret_val, 0);
+    let __lg0 = 0;
     for (let i = 1; i <= $.get(avg_len, 0); i++) {
+      if (++__lg0 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg0)");
       $.set($$.let.fn1_ret_val, $.get($$.let.fn1_ret_val, 0) + $.get(avg_src, i));
     }
     ;
@@ -1262,6 +1307,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open, high} = $.data;
   const {Type, ta} = $.pine;
   const p0 = $.param({

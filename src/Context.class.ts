@@ -49,6 +49,7 @@ export class Context {
     public chartTimezone: string | null = null; // Chart display timezone (affects log timestamps only, not computation)
     public dataVersion: number = 0; // Incremented when market data changes (streaming mode)
 
+    public __maxLoops: number = 500000;
     public NA: any = NaN;
 
     public lang: any;

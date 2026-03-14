@@ -15,6 +15,55 @@ import {
     createScopedVariableAccess,
 } from './ExpressionTransformer';
 
+/**
+ * Creates the AST nodes for a loop guard:
+ * 1. A counter declaration: `let __lgN = 0;` (to be hoisted before the loop)
+ * 2. A guard check: `if (++__lgN > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lgN)");`
+ *    (to be prepended to the loop body)
+ */
+export function createLoopGuardNodes(guardName: string): { counterDecl: any; guardCheck: any } {
+    // let __lgN = 0;
+    const counterDecl = {
+        type: 'VariableDeclaration',
+        kind: 'let',
+        declarations: [{
+            type: 'VariableDeclarator',
+            id: { type: 'Identifier', name: guardName },
+            init: { type: 'Literal', value: 0 },
+        }],
+    };
+
+    // if (++__lgN > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lgN)");
+    const guardCheck = {
+        type: 'IfStatement',
+        test: {
+            type: 'BinaryExpression',
+            operator: '>',
+            left: {
+                type: 'UpdateExpression',
+                operator: '++',
+                prefix: true,
+                argument: { type: 'Identifier', name: guardName },
+            },
+            right: { type: 'Identifier', name: '__maxLoops' },
+        },
+        consequent: {
+            type: 'ThrowStatement',
+            argument: {
+                type: 'NewExpression',
+                callee: { type: 'Identifier', name: 'Error' },
+                arguments: [{
+                    type: 'Literal',
+                    value: `Loop exceeded maximum iterations (${guardName})`,
+                }],
+            },
+        },
+        alternate: null,
+    };
+
+    return { counterDecl, guardCheck };
+}
+
 export function transformAssignmentExpression(node: any, scopeManager: ScopeManager): void {
     let targetVarRef = null;
     // Transform assignment expressions to use the context object
@@ -816,9 +865,20 @@ export function transformForStatement(node: any, scopeManager: ScopeManager, c: 
 
     // Transform the loop body
     scopeManager.setSuppressHoisting(false);
+
+    // Inject loop guard: hoist counter declaration before the loop
+    const forGuardName = scopeManager.getNextLoopGuardName();
+    const forGuard = createLoopGuardNodes(forGuardName);
+    scopeManager.addHoistedStatement(forGuard.counterDecl);
+
     scopeManager.pushScope('for');
     c(node.body, scopeManager);
     scopeManager.popScope();
+
+    // Prepend guard check as the first statement in the loop body
+    if (node.body.type === 'BlockStatement') {
+        node.body.body.unshift(forGuard.guardCheck);
+    }
 
     // Clean up loop variable so it doesn't leak to outer scope
     // (prevents shadowing issues when the same name is reused later)
@@ -880,10 +940,20 @@ export function transformWhileStatement(node: any, scopeManager: ScopeManager, c
 
     scopeManager.setSuppressHoisting(false);
 
+    // Inject loop guard: hoist counter declaration before the loop
+    const whileGuardName = scopeManager.getNextLoopGuardName();
+    const whileGuard = createLoopGuardNodes(whileGuardName);
+    scopeManager.addHoistedStatement(whileGuard.counterDecl);
+
     // Process the body of the while loop
     scopeManager.pushScope('whl');
     c(node.body, scopeManager);
     scopeManager.popScope();
+
+    // Prepend guard check as the first statement in the loop body
+    if (node.body.type === 'BlockStatement') {
+        node.body.body.unshift(whileGuard.guardCheck);
+    }
 }
 
 export function transformExpression(node: any, scopeManager: ScopeManager): void {
