@@ -6,7 +6,7 @@ import { PineArrayType } from './PineArrayObject';
 
 export function inferArrayType(values: any[]): PineArrayType {
     if (values.every((value) => typeof value === 'number')) {
-        if (values.every((value) => (value | 0) === value)) {
+        if (values.every((value) => Number.isInteger(value))) {
             return PineArrayType.int;
         } else {
             return PineArrayType.float;
@@ -23,7 +23,7 @@ export function inferArrayType(values: any[]): PineArrayType {
 
 export function inferValueType(value: any): PineArrayType {
     if (typeof value === 'number') {
-        if ((value | 0) === value) {
+        if (Number.isInteger(value)) {
             return PineArrayType.int;
         } else {
             return PineArrayType.float;
@@ -41,7 +41,7 @@ export function inferValueType(value: any): PineArrayType {
 export function isArrayOfType(array: any[], type: PineArrayType) {
     switch (type) {
         case PineArrayType.int:
-            return array.every((value) => typeof value === 'number' && (value | 0) === value);
+            return array.every((value) => Number.isInteger(value));
         case PineArrayType.float:
             return array.every((value) => typeof value === 'number' && !isNaN(value));
         case PineArrayType.string:
@@ -60,7 +60,7 @@ export function isValueOfType(value: any, type: PineArrayType) {
     if (type === PineArrayType.any) return true;
     switch (type) {
         case PineArrayType.int:
-            return typeof value === 'number' && ((value | 0) === value || isNaN(value));
+            return Number.isInteger(value) || isNaN(value);
         case PineArrayType.float:
             return typeof value === 'number';
         case PineArrayType.string:

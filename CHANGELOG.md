@@ -1,5 +1,27 @@
 # Change Log
 
+## [0.9.6] - 2026-03-14 - Runtime Error Handling, Loop Guard, Array Fixes & New Market Data Providers
+
+### Added
+
+- **`FMPProvider (beta)`** (Financial Modeling Prep): New provider for US equities, ETFs, crypto and forex via the FMP REST API. Supports daily (EOD) and intraday timeframes (1m–4h, paid plans). Configures with `Provider.FMP.configure({ apiKey: '...' })`.
+- **`AlpacaProvider (beta)`**: New provider for US equities and ETFs via Alpaca Markets. Supports minute through monthly timeframes with cursor-based pagination (up to 10 000 bars/page). Configures with `Provider.Alpaca.configure({ apiKey: '...', secretKey: '...' })`.
+- **`BaseProvider` Abstract Class**: New shared base class for all providers. Handles `closeTime` normalization, fail-early API key validation, and **automatic candle aggregation** — when a requested timeframe is not natively supported, `BaseProvider` selects the best available sub-timeframe, fetches sub-candles, and aggregates them transparently. `BinanceProvider` and `MockProvider` have been refactored to extend it.
+- **Candle Aggregation Engine** (`src/marketData/aggregation.ts`): New module with `selectSubTimeframe()`, `aggregateCandles()`, and `getAggregationRatio()`. Supports fixed-ratio aggregation for intraday timeframes and calendar-based grouping for weekly/monthly bars.
+- **`PineRuntimeError`**: New exported error class with a `method?: string` property. Thrown on Pine Script runtime violations (out-of-bounds access, loop limit exceeded). Distinguishable from general JS errors via `instanceof`.
+- **`PineTS.setMaxLoops(n)`**: Configures the maximum iterations allowed per loop (default 500 000, matching TradingView's limit). Exceeding it throws a `PineRuntimeError`.
+- **Loop Guard Injection**: The transpiler injects a counter + guard at the top of every `for`/`while` body, preventing runaway loops from hanging the runtime.
+- **Negative Array Indices (Pine Script v6)**: `array.get`, `array.set`, `array.insert`, `array.remove`, `matrix.get`, `matrix.set` now accept negative indices (`-1` = last element).
+
+### Fixed
+
+- **Stored Numbers Precision**: `$.set()` now applies `context.precision()` when writing a number into a Series, preventing floating-point drift from accumulating across bars.
+- **User Functions Returning Tuples with Complex Expressions**: `transformReturnStatement` was not walking into binary, unary, call, logical, or conditional expression nodes inside tuple arrays. Expressions like `_mid + _dev * mult` or `-_val` were left with bare identifiers, producing wrong values at runtime.
+- **Array/Matrix Out-of-Bounds Reporting**: `array.get/set/insert/remove` and `matrix.get/set/row/col` now throw a `PineRuntimeError` when an index (after negative normalization) is still out of bounds, replacing the previous silent `NaN`/`undefined`.
+- **Weak integer check fixed** previously using ((valus | 0) == value) now using Number.isInteger(value)
+
+---
+
 ## [0.9.5] - 2026-03-12 - Time & Timezone Fixes
 
 ### Added
@@ -36,8 +58,8 @@
 
 - **For-Loop Init & Update `$.get()` Wrapping**: The for-loop init and update expressions lacked `addArrayAccess`, `MemberExpression`, and `CallExpression` handlers. Series variables appearing in loop bounds (e.g., `for i = 0 to bar_index - 1`) were left as raw Series objects, causing the update ternary to evaluate to `NaN` and producing infinite loops or bodies that never executed.
 - **While-Loop Test Condition**: `while bar_index > cnt` and similar conditions with Series variables were not wrapped in `$.get()`, so the comparison always evaluated against a raw Series object (→ `NaN`). Fixed by adding missing `addArrayAccess` and namespace-object skip logic to `transformWhileStatement`.
-- **Function-Scoped Variable Resolution**: Added `isVariableInFunctionScope()` to `ScopeManager`. `createScopedVariableReference()` now correctly resolves `var` declarations inside nested `if`/`for` blocks *within* functions to the local context (`$$`) instead of the global context (`$`).
-- **Optional Chaining for `na` UDT Drawing Fields**: `hasGetCallInChain()` now traverses `MemberExpression` *and* intermediate `CallExpression` nodes to detect `$.get()` in deeper chains. Inserts `?.` on the final method call so `myStruct.line?.set_x2(x)` does not crash when the field is `na`/`undefined`.
+- **Function-Scoped Variable Resolution**: Added `isVariableInFunctionScope()` to `ScopeManager`. `createScopedVariableReference()` now correctly resolves `var` declarations inside nested `if`/`for` blocks _within_ functions to the local context (`$$`) instead of the global context (`$`).
+- **Optional Chaining for `na` UDT Drawing Fields**: `hasGetCallInChain()` now traverses `MemberExpression` _and_ intermediate `CallExpression` nodes to detect `$.get()` in deeper chains. Inserts `?.` on the final method call so `myStruct.line?.set_x2(x)` does not crash when the field is `na`/`undefined`.
 - **User Function vs Method Call Disambiguation**: Added `isChainedPropertyMethod` guard — when the callee object is itself a `MemberExpression` (e.g., `myObj.x.set()`), the call is not mistakenly redirected through `$.call()` even if `set` happens to be a user-defined function name. Added `_skipTransformation = true` on function-reference identifiers inside `$.call()` to prevent them from resolving to same-named variables.
 - **`hasGetCallInChain()` Chain Expression Traversal**: Extended to walk through `ChainExpression` wrapper nodes (`?.` optional chains) so already-wrapped intermediate nodes are also checked when determining whether to insert optional chaining.
 - **`ReturnStatement` Walk-Through**: `MainTransformer`'s `ReturnStatement` handler now recurses into complex return arguments when not in function scope, preventing untransformed expressions in nested return statements.
@@ -80,7 +102,7 @@
 
 ### Fixed
 
-- **While-Loop Test Condition Hoisting** (infinite-loop crash): `array.size()` and similar calls in a `while` condition were being hoisted to a temp variable *outside* the loop by the default CallExpression walker, making them one-shot evaluations and causing an infinite loop followed by a crash. `MainTransformer` now registers a `WhileStatement` handler and `transformWhileStatement` was rewritten to use a recursive walker with hoisting suppressed throughout the entire test condition.
+- **While-Loop Test Condition Hoisting** (infinite-loop crash): `array.size()` and similar calls in a `while` condition were being hoisted to a temp variable _outside_ the loop by the default CallExpression walker, making them one-shot evaluations and causing an infinite loop followed by a crash. `MainTransformer` now registers a `WhileStatement` handler and `transformWhileStatement` was rewritten to use a recursive walker with hoisting suppressed throughout the entire test condition.
 - **Array Pattern Scoping Crash**: `isArrayPatternVar` was determined using a global (non-scoped) set in `ScopeManager`. A local function variable whose name happened to match an outer-scope destructured tuple element was falsely treated as an array pattern, causing a runtime crash. Fixed by adding a shape guard: the flag is only set when `decl.init` is a computed `MemberExpression` (the `_tmp_0[0]` pattern produced by the AnalysisPass destructuring rewrite).
 - **For-Loop Namespace Wrapping** (`math.min` → `$.get(math, 0).min`): In the for-loop test condition walker, `MemberExpression` nodes unconditionally recursed into their object, causing the `Identifier` handler to wrap context-bound namespace objects (`math`, `array`, `ta`, …) with `$.get()`. Fixed by skipping recursion and `addArrayAccess` for identifiers that are the object of a `MemberExpression` and are context-bound namespaces.
 - **`request.security` Cross-Timeframe Value Alignment**: `barmerge.gaps_off` / `barmerge.lookahead_off` were passed as strings; their truthiness caused `findLTFContextIdx` to take the wrong branch (returning the first intra-bar instead of the last). Fixed by converting barmerge string enums to booleans. Added `normalizeTimeframe()` to map non-canonical formats (`'1h'`→`'60'`, `'1d'`→`'D'`) so `isLTF` determination is correct. Fixed secondary context date-range derivation to use `effectiveSDate` from `marketData` and extend `secEDate` to cover the last bar's intra-bars.
