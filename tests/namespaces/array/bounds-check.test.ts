@@ -20,23 +20,27 @@ describe('Array.get Bounds Checking', () => {
     const sDate = new Date('2024-01-01').getTime();
     const eDate = new Date('2024-01-02').getTime();
 
-    it('should return NaN for negative index', async () => {
+    it('should resolve negative index from end (Pine v6 semantics)', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, sDate, eDate);
 
         const sourceCode = (context: any) => {
             const { array, na } = context.pine;
 
             const arr = array.new_float(3, 100);
-            const val = array.get(arr, -1);
-            const isNa = na(val);
+            const val = array.get(arr, -1);    // last element
+            const val2 = array.get(arr, -3);   // first element
+            const oob = array.get(arr, -4);    // out of bounds (beyond first)
+            const isNa = na(oob);
 
-            return { val, isNa };
+            return { val, val2, oob, isNa };
         };
 
         const { result } = await pineTS.run(sourceCode);
         const last = (arr: any[]) => arr[arr.length - 1];
 
-        expect(last(result.val)).toBeNaN();
+        expect(last(result.val)).toBe(100);   // -1 → last element
+        expect(last(result.val2)).toBe(100);  // -3 → first element
+        expect(last(result.oob)).toBeNaN();   // -4 → out of bounds
         expect(last(result.isNa)).toBe(true);
     });
 

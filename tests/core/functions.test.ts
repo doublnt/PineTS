@@ -637,4 +637,50 @@ describe('Functions', () => {
 
         expect(plotdata_str.trim()).toEqual(expected_plot.trim());
     });
+
+    it('Nested UDT Field Assignment and Read', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'W', null, new Date('2018-12-10').getTime(), new Date('2020-01-27').getTime());
+
+        const sourceCode = (context) => {
+            const { close } = context.data;
+            const { plotchar, Type } = context.pine;
+
+            const Inner = Type({ value: 'float' });
+            const Outer = Type({ inner: 'Inner', scale: 'float' });
+
+            var _outer = Outer.new(Inner.new(close), 2);
+            _outer = Outer.new(Inner.new(close), 2);
+
+            // Read nested field
+            let _inner_val = _outer.inner.value;
+
+            // Write nested field: _outer.inner.value = close * scale
+            _outer.inner.value = close * _outer.scale;
+            let _modified = _outer.inner.value;
+
+            plotchar(_inner_val, 'inner_val');
+            plotchar(_modified, 'modified');
+
+            return { _inner_val, _modified };
+        };
+
+        const { result, plots } = await pineTS.run(sourceCode);
+
+        const innerData = plots['inner_val']?.data;
+        const modifiedData = plots['modified']?.data;
+
+        expect(innerData).toBeDefined();
+        expect(modifiedData).toBeDefined();
+        expect(innerData.length).toBeGreaterThan(0);
+
+        // Verify: _inner_val should equal close, _modified should equal close * 2
+        for (let i = 0; i < innerData.length; i++) {
+            const iv = innerData[i]?.value;
+            const mv = modifiedData[i]?.value;
+            if (typeof iv === 'number' && !isNaN(iv) && typeof mv === 'number' && !isNaN(mv)) {
+                // _modified should be exactly 2 * _inner_val (scale=2, _inner_val=close)
+                expect(Math.abs(mv - iv * 2)).toBeLessThan(1e-8);
+            }
+        }
+    });
 });

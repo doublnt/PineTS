@@ -4,6 +4,8 @@ import { PineArrayObject } from '../PineArrayObject';
 
 export function remove(context: any) {
     return (id: PineArrayObject, index: number): any => {
+        // Pine Script v6: negative indices count backwards from the end.
+        if (index < 0) index = id.array.length + index;
         if (index >= 0 && index < id.array.length) {
             return id.array.splice(index, 1)[0];
         }

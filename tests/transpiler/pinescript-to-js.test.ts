@@ -1885,3 +1885,59 @@ plot(sma_val)
         expect(tupleContent).not.toMatch(/(?<!\w)_ema\b/);
     });
 });
+
+describe('Pine Script Transpilation - Nested Member Assignment', () => {
+    it('should transform 2-level deep member assignment (obj.a.b = val)', () => {
+        const code = `
+//@version=5
+indicator("Nested UDT Assignment")
+
+type Inner
+    float value
+
+type Outer
+    Inner inner
+    float scale
+
+var _outer = Outer.new(Inner.new(close), 2.0)
+_outer := Outer.new(Inner.new(close), 2.0)
+
+_outer.inner.value := close * _outer.scale
+_modified = _outer.inner.value
+plot(_modified)
+        `;
+
+        const result = transpile(code);
+        const jsCode = result.toString();
+
+        // Left side: must be $.get($.var.glb1__outer, 0).inner.value, NOT bare _outer.inner.value
+        expect(jsCode).toContain('$.get($.var.glb1__outer, 0).inner.value =');
+        expect(jsCode).not.toMatch(/(?<!\w)_outer\.inner\.value\s*=/);
+
+        // Right side should also have _outer.scale resolved
+        expect(jsCode).toContain('$.get($.var.glb1__outer, 0).scale');
+    });
+
+    it('should still transform 1-level deep member assignment (obj.prop = val)', () => {
+        const code = `
+//@version=5
+indicator("Shallow UDT Assignment")
+
+type Point
+    float x
+    float y
+
+var _pt = Point.new(0.0, 0.0)
+_pt := Point.new(close, open)
+_pt.x := close * 2
+plot(_pt.x)
+        `;
+
+        const result = transpile(code);
+        const jsCode = result.toString();
+
+        // 1-level assignment: _pt.x := ... should become $.get($.var.glb1__pt, 0).x = ...
+        expect(jsCode).toContain('$.get($.var.glb1__pt, 0).x =');
+        expect(jsCode).not.toMatch(/(?<!\w)_pt\.x\s*=/);
+    });
+});
