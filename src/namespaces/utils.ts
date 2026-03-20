@@ -22,7 +22,7 @@ const TYPE_CHECK = {
     null: (arg) => arg === null,
     NaN: (arg) => isNaN(arg),
 
-    remaining_options: (arg) => typeof arg === 'object' && !(arg instanceof Series) && !(arg instanceof ChartPointObject) && !isPlot(arg),
+    remaining_options: (arg) => arg !== null && typeof arg === 'object' && !(arg instanceof Series) && !(arg instanceof ChartPointObject) && !isPlot(arg),
 };
 
 export type PineTypeMap<T> = {

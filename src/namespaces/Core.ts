@@ -132,12 +132,13 @@ export class Core {
     }
 
     na(series: any) {
-        return isNaN(Series.from(series).get(0));
+        const val = Series.from(series).get(0);
+        return val === null || val === undefined || (typeof val === 'number' && isNaN(val));
     }
     nz(series: any, replacement: number = 0) {
         const val = Series.from(series).get(0);
         const rep = Series.from(replacement).get(0);
-        return isNaN(val) ? rep : val;
+        return (val === null || val === undefined || (typeof val === 'number' && isNaN(val))) ? rep : val;
     }
     fixnan(series: any) {
         const _s = Series.from(series);
