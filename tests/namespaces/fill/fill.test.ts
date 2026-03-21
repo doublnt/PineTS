@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 
 import { Provider } from '@pinets/marketData/Provider.class';
 
+const sDate = new Date('2025-01-01').getTime();
+const eDate = new Date('2025-01-10').getTime();
+
 describe('FILL Namespace', () => {
     it('fill() between two plots creates a fill entry', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, new Date('2025-01-01').getTime(), new Date('2025-01-10').getTime());
@@ -219,5 +222,141 @@ describe('FILL Namespace', () => {
         expect(plots['MyFill']).toBeDefined();
         expect(plots['MyFill'].options.style).toBe('fill');
         expect(plots['MyFill'].title).toBe('MyFill');
+    });
+});
+
+/**
+ * Regression tests for force_overlay + color(na) + gradient fill.
+ *
+ * These cover bugs where:
+ * - color(na) returning null was treated as a named-options object,
+ *   swallowing subsequent named args like force_overlay
+ * - Gradient fills passed as named args (top_value, bottom_value, etc.)
+ *   were not detected as gradients
+ * - Plots with color(na) were rendered with default blue instead of hidden
+ */
+describe('force_overlay + color(na) + gradient fill (regression)', () => {
+
+    it('plot() with color(na) sets per-point color to undefined (hidden)', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, sDate, eDate);
+
+        const code = `
+//@version=6
+indicator("Test", overlay = false)
+plot(close, "Visible")
+plot(close, "Hidden", color(na))
+        `;
+
+        const { plots } = await pineTS.run(code);
+
+        // Visible plot should have default color
+        expect(plots['Visible'].data[0].options.color).toBe('#2962ff');
+
+        // Hidden plot (color=na) should have undefined color on every point
+        for (const point of plots['Hidden'].data) {
+            expect(point.options.color).toBeUndefined();
+        }
+    });
+
+    it('plot() with color(na) and force_overlay=true sets overlay correctly', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, sDate, eDate);
+
+        const code = `
+//@version=6
+indicator("Test", overlay = false)
+plot(close, "Normal")
+plot(close, "OverlayHidden", color(na), force_overlay = true)
+        `;
+
+        const { plots } = await pineTS.run(code);
+
+        // Normal plot: overlay = false (indicator is not overlay)
+        expect(plots['Normal'].options.overlay).toBe(false);
+
+        // OverlayHidden: force_overlay should be true despite color(na)
+        expect(plots['OverlayHidden'].options.overlay).toBe(true);
+
+        // And per-point color should still be undefined (hidden)
+        for (const point of plots['OverlayHidden'].data) {
+            expect(point.options.color).toBeUndefined();
+        }
+    });
+
+    it('gradient fill via named args (top_value/bottom_value) is detected', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, sDate, eDate);
+
+        const code = `
+//@version=6
+indicator("Test", overlay = false)
+p1 = plot(close, "Upper", color(na), force_overlay = true)
+p2 = plot(open, "Lower", color(na), force_overlay = true)
+fill(p1, p2, top_value = close, bottom_value = open, top_color = color.new(#089981, 70), bottom_color = color.new(#f23645, 70))
+        `;
+
+        const { plots } = await pineTS.run(code);
+
+        // Both plots should be overlay
+        expect(plots['Upper'].options.overlay).toBe(true);
+        expect(plots['Lower'].options.overlay).toBe(true);
+
+        // Find the fill
+        const fillEntry = Object.values(plots).find((p: any) => p.options?.style === 'fill') as any;
+        expect(fillEntry).toBeDefined();
+
+        // Must be detected as a gradient fill
+        expect(fillEntry.options.gradient).toBe(true);
+
+        // Per-bar data should have gradient properties
+        const lastPoint = fillEntry.data[fillEntry.data.length - 1];
+        expect(lastPoint.options.top_color).toBeDefined();
+        expect(lastPoint.options.bottom_color).toBeDefined();
+        expect(typeof lastPoint.options.top_value).toBe('number');
+        expect(typeof lastPoint.options.bottom_value).toBe('number');
+    });
+
+    it('gradient fill via positional args still works', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, sDate, eDate);
+
+        const { plots } = await pineTS.run((context) => {
+            var p1 = plot(close, 'Upper');
+            var p2 = plot(open, 'Lower');
+            fill(p1, p2, close, open, color.new(color.green, 80), color.new(color.red, 80));
+            return {};
+        });
+
+        const fillEntry = Object.values(plots).find((p: any) => p.options?.style === 'fill') as any;
+        expect(fillEntry).toBeDefined();
+        expect(fillEntry.options.gradient).toBe(true);
+
+        const lastPoint = fillEntry.data[fillEntry.data.length - 1];
+        expect(lastPoint.options.top_color).toBeDefined();
+        expect(lastPoint.options.bottom_color).toBeDefined();
+    });
+
+    it('null from color(na) does not swallow subsequent named args', async () => {
+        // Regression: color(na) returned null, which typeof === 'object',
+        // causing parseArgsForPineParams to treat it as the named-options
+        // object and stop parsing — swallowing force_overlay.
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, sDate, eDate);
+
+        const code = `
+//@version=6
+indicator("Test", overlay = false)
+plot(close, "A", color(na), force_overlay = true)
+plot(close, "B", color.red, force_overlay = true)
+plot(close, "C", force_overlay = true)
+        `;
+
+        const { plots } = await pineTS.run(code);
+
+        // All three should have overlay = true
+        expect(plots['A'].options.overlay).toBe(true);
+        expect(plots['B'].options.overlay).toBe(true);
+        expect(plots['C'].options.overlay).toBe(true);
+
+        // A has color(na) → hidden, B has explicit red, C has no color → default
+        expect(plots['A'].data[0].options.color).toBeUndefined();
+        expect(plots['B'].data[0].options.color).toBe('#F23645');
+        expect(plots['C'].data[0].options.color).toBe('#2962ff');
     });
 });
