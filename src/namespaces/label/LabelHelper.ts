@@ -36,7 +36,7 @@ export class LabelHelper {
             this.context.plots['__labels__'] = {
                 title: '__labels__',
                 data: [],
-                options: { style: 'label', overlay: true },
+                options: { style: 'label', overlay: this.context.indicator?.overlay || false },
             };
         }
     }

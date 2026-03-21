@@ -34,7 +34,7 @@ export class LineHelper {
             this.context.plots['__lines__'] = {
                 title: '__lines__',
                 data: [],
-                options: { style: 'drawing_line', overlay: true },
+                options: { style: 'drawing_line', overlay: this.context.indicator?.overlay || false },
             };
         }
     }

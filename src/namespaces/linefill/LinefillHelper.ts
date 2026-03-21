@@ -19,7 +19,7 @@ export class LinefillHelper {
             this.context.plots['__linefills__'] = {
                 title: '__linefills__',
                 data: [],
-                options: { style: 'linefill', overlay: true },
+                options: { style: 'linefill', overlay: this.context.indicator?.overlay || false },
             };
         }
     }
