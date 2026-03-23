@@ -56,10 +56,14 @@ export class Context {
     public warnings: { message: string; method?: string; bar: number }[] = [];
 
     /** Alert events emitted by alert() and alertcondition() calls. */
-    public alerts: { type: string; message: string; title?: string; freq?: string; bar_index: number; time: number }[] = [];
+    public alerts: { type: string; id: string; message: string; title?: string; freq?: string; bar_index: number; time: number }[] = [];
 
     /** Alert mode: 'realtime' = only fire on live bars (TV behavior), 'all' = fire on every bar (backtest). */
     public _alertMode: 'realtime' | 'all' = 'realtime';
+
+    /** Monotonically increasing counter, incremented each time a bar starts executing.
+     *  Used by alertcondition/AlertHelper to detect re-execution of the same bar. */
+    public _execTick: number = 0;
 
     /** Emit a runtime warning. The script continues execution (returns na/no-op). */
     public warn(message: string, method?: string): void {

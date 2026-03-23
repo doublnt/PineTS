@@ -1217,6 +1217,22 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
             });
         }
 
+        // Inject unique callsite ID for alert calls (per-callsite frequency gating)
+        if (namespace === 'alert') {
+            const callsiteId = scopeManager.getNextAlertCallId();
+            node.arguments.push({
+                type: 'ObjectExpression',
+                properties: [{
+                    type: 'Property',
+                    key: { type: 'Identifier', name: '__callsiteId' },
+                    value: callsiteId,
+                    kind: 'init',
+                    computed: false,
+                    shorthand: false,
+                }],
+            });
+        }
+
         // Inject unique call ID for TA functions to enable proper state management
         if (namespace === 'ta') {
             if (scopeManager.getCurrentScopeType() === 'fn') {

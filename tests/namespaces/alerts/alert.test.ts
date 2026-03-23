@@ -66,20 +66,26 @@ describe('Alert System', () => {
             expect(ctx.alerts[0].message).toBe('tick');
         });
 
-        it('should fire alert once per bar with freq_once_per_bar', async () => {
+        it('should fire each callsite once per bar with freq_once_per_bar', async () => {
             const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
             pineTS.setAlertMode('all');
             const code = (context: any) => {
                 const { alert } = context.pine;
-                // Call alert twice per bar — only the first should fire
+                // Two different callsites — each fires once per bar
                 alert.any('first', alert.freq_once_per_bar);
                 alert.any('second', alert.freq_once_per_bar);
             };
 
             const ctx = await pineTS.run(code);
-            // One alert per bar, not two
-            expect(ctx.alerts.length).toBe(ctx.marketData.length);
-            expect(ctx.alerts.every((a: any) => a.message === 'first')).toBe(true);
+            // Two alerts per bar (one per callsite)
+            expect(ctx.alerts.length).toBe(ctx.marketData.length * 2);
+            // Verify callsite IDs are distinct
+            const bar0Alerts = ctx.alerts.filter((a: any) => a.bar_index === 0);
+            expect(bar0Alerts.length).toBe(2);
+            expect(bar0Alerts[0].id).toBe('alert_0');
+            expect(bar0Alerts[1].id).toBe('alert_1');
+            expect(bar0Alerts[0].message).toBe('first');
+            expect(bar0Alerts[1].message).toBe('second');
         });
 
         it('should use freq_once_per_bar as default', async () => {
@@ -87,13 +93,14 @@ describe('Alert System', () => {
             pineTS.setAlertMode('all');
             const code = (context: any) => {
                 const { alert } = context.pine;
+                // Two different callsites with default freq
                 alert.any('msg1');
-                alert.any('msg2'); // should be suppressed (same bar, once_per_bar default)
+                alert.any('msg2');
             };
 
             const ctx = await pineTS.run(code);
-            expect(ctx.alerts.length).toBe(ctx.marketData.length);
-            expect(ctx.alerts.every((a: any) => a.message === 'msg1')).toBe(true);
+            // Both fire (different callsites), each once per bar
+            expect(ctx.alerts.length).toBe(ctx.marketData.length * 2);
         });
     });
 

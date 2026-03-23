@@ -303,18 +303,22 @@ export class PineTS {
 
                     emit('data', ctx);
 
-                    // Emit any runtime warnings accumulated during this page
+                    // Emit any NEW runtime warnings accumulated since last tick
                     if (ctx.warnings && ctx.warnings.length > 0) {
                         for (const w of ctx.warnings) {
                             emit('warning', w);
                         }
+                        // Clear so next tick only emits newly added warnings
+                        ctx.warnings.length = 0;
                     }
 
-                    // Emit any alert events accumulated during this page
+                    // Emit any NEW alert events accumulated since last tick
                     if (ctx.alerts && ctx.alerts.length > 0) {
                         for (const a of ctx.alerts) {
                             emit('alert', a);
                         }
+                        // Clear so next tick only emits newly added alerts
+                        ctx.alerts.length = 0;
                     }
 
                     // If live streaming is enabled, wait for the interval before fetching next data
@@ -733,6 +737,7 @@ export class PineTS {
 
         for (let i = startIdx; i < endIdx; i++) {
             context.idx = i;
+            context._execTick = (context._execTick || 0) + 1;
 
             context.data.close.data.push(this.close[i]);
             context.data.open.data.push(this.open[i]);
