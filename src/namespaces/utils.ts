@@ -10,7 +10,7 @@ const TYPE_CHECK = {
     string: (arg) => typeof arg === 'string',
     // Pine Script color params accept both color strings and `na` (NaN).
     // Using 'color' instead of 'string' prevents NaN from invalidating the signature.
-    color: (arg) => typeof arg === 'string' || (typeof arg === 'number' && isNaN(arg)),
+    color: (arg) => typeof arg === 'string' || arg === null || (typeof arg === 'number' && isNaN(arg)),
     number: (arg) => typeof arg === 'number',
     boolean: (arg) => typeof arg === 'boolean',
     array: (arg) => Array.isArray(arg),
@@ -22,7 +22,7 @@ const TYPE_CHECK = {
     null: (arg) => arg === null,
     NaN: (arg) => isNaN(arg),
 
-    remaining_options: (arg) => typeof arg === 'object' && !(arg instanceof Series) && !(arg instanceof ChartPointObject) && !isPlot(arg),
+    remaining_options: (arg) => arg !== null && typeof arg === 'object' && !(arg instanceof Series) && !(arg instanceof ChartPointObject) && !isPlot(arg),
 };
 
 export type PineTypeMap<T> = {

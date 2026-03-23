@@ -4,7 +4,7 @@
 // JavaScript Code Generator for PineScript AST
 // Transforms ESTree-compatible AST into JavaScript code
 
-import { CONTEXT_PINE_VARS } from '../settings';
+import { CONTEXT_PINE_VARS, NAMESPACE_COLLISION_NAMES } from '../settings';
 
 // Set of names that conflict with Pine context variables/namespaces.
 // Function parameters with these names must be renamed to avoid Phase 2
@@ -53,9 +53,160 @@ export class CodeGenerator {
         return this.output.join('');
     }
 
-    // Pre-scan AST to collect function parameter lists for named-arg resolution.
+    // Pre-scan AST to collect function parameter lists for named-arg resolution
+    // and rename user variables that conflict with Pine namespace names.
     private preProcessAST(ast: any) {
         this.collectFunctionParams(ast);
+        this.renameConflictingVariables(ast);
+    }
+
+    /**
+     * Scan the program body for variable declarations and assignments whose
+     * names collide with Pine namespace/built-in names (e.g., `fill`, `size`,
+     * `color`, `line`). Rename them with a `_$N` suffix so they don't shadow
+     * the namespace destructured from `$.pine`.
+     *
+     * Only renames **user variables** — function parameters are handled
+     * separately in generateFunctionDeclaration().
+     *
+     * Renaming rules:
+     * - Variable declaration target (let fill = ...) → renamed
+     * - Assignment target (fill := ...) → renamed
+     * - Bare identifier read (return fill) → renamed
+     * - Call callee (fill(...)) → NOT renamed (namespace call)
+     * - MemberExpression object (size.tiny) → NOT renamed (namespace access)
+     * - MemberExpression property (array.size) → NOT renamed (method name)
+     * - Object property key ({size: ...}) → NOT renamed (named arg key)
+     */
+    private renameConflictingVariables(ast: any) {
+        const renameMap = new Map<string, string>();
+
+        // Collect conflicting variable names from the entire program
+        this.collectConflictingVarNames(ast, renameMap);
+
+        if (renameMap.size > 0) {
+            // Apply context-aware renaming across the entire program body
+            this.renameVariableRefsInAST(ast, renameMap);
+        }
+    }
+
+    /**
+     * Walk the AST and collect variable declarations / assignment targets
+     * whose names conflict with CONFLICTING_NAMES.
+     */
+    private collectConflictingVarNames(node: any, renameMap: Map<string, string>) {
+        if (!node || typeof node !== 'object') return;
+
+        if (node.type === 'VariableDeclaration') {
+            for (const decl of node.declarations) {
+                if (decl.id?.type === 'Identifier' && NAMESPACE_COLLISION_NAMES.has(decl.id.name) && !renameMap.has(decl.id.name)) {
+                    renameMap.set(decl.id.name, `${decl.id.name}_$${this.paramRenameCounter++}`);
+                }
+                if (decl.id?.type === 'ArrayPattern') {
+                    for (const el of decl.id.elements) {
+                        if (el?.type === 'Identifier' && NAMESPACE_COLLISION_NAMES.has(el.name) && !renameMap.has(el.name)) {
+                            renameMap.set(el.name, `${el.name}_$${this.paramRenameCounter++}`);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (node.type === 'AssignmentExpression' || node.type === 'ReassignmentExpression') {
+            if (node.left?.type === 'Identifier' && NAMESPACE_COLLISION_NAMES.has(node.left.name) && !renameMap.has(node.left.name)) {
+                renameMap.set(node.left.name, `${node.left.name}_$${this.paramRenameCounter++}`);
+            }
+        }
+
+        for (const key of Object.keys(node)) {
+            if (key === 'type') continue;
+            const val = node[key];
+            if (Array.isArray(val)) {
+                for (const child of val) {
+                    if (child && typeof child === 'object') {
+                        this.collectConflictingVarNames(child, renameMap);
+                    }
+                }
+            } else if (val && typeof val === 'object' && val.type) {
+                this.collectConflictingVarNames(val, renameMap);
+            }
+        }
+    }
+
+    /**
+     * Context-aware variable reference renaming.
+     * Renames Identifiers that are user-variable references, but skips:
+     * - CallExpression callees (namespace function calls)
+     * - MemberExpression objects with non-computed property (namespace.member)
+     * - MemberExpression non-computed properties (obj.namespace)
+     * - Object property keys ({namespace: value})
+     */
+    private renameVariableRefsInAST(node: any, renameMap: Map<string, string>) {
+        if (!node || typeof node !== 'object') return;
+
+        // CallExpression: skip callee if it's a matching Identifier, rename args
+        if (node.type === 'CallExpression') {
+            // For callee: if it's a MemberExpression (like array.size), handle normally via recursion
+            // If it's a direct Identifier (like fill()), skip it — it's a namespace call
+            if (node.callee?.type === 'Identifier' && renameMap.has(node.callee.name)) {
+                // Skip callee, only process arguments
+            } else {
+                this.renameVariableRefsInAST(node.callee, renameMap);
+            }
+            if (node.arguments) {
+                for (const arg of node.arguments) {
+                    this.renameVariableRefsInAST(arg, renameMap);
+                }
+            }
+            return;
+        }
+
+        // MemberExpression: skip object if it has a non-computed property access
+        // (e.g., size.tiny — size is a namespace, not a variable)
+        // Also skip non-computed property identifiers (e.g., array.size)
+        if (node.type === 'MemberExpression') {
+            if (!node.computed && node.object?.type === 'Identifier' && renameMap.has(node.object.name)) {
+                // size.tiny → namespace access, skip object, skip property
+                return;
+            }
+            if (!node.computed && node.property?.type === 'Identifier' && renameMap.has(node.property.name)) {
+                // array.size → method name, recurse object only, skip property
+                this.renameVariableRefsInAST(node.object, renameMap);
+                return;
+            }
+            // For other MemberExpressions (computed or no match), recurse normally
+            this.renameVariableRefsInAST(node.object, renameMap);
+            if (node.computed) this.renameVariableRefsInAST(node.property, renameMap);
+            return;
+        }
+
+        // Property: skip key, rename value
+        if (node.type === 'Property') {
+            // Key is a named argument or object literal key — never rename
+            this.renameVariableRefsInAST(node.value, renameMap);
+            return;
+        }
+
+        // Leaf: rename matching Identifier
+        if (node.type === 'Identifier' && renameMap.has(node.name)) {
+            node.name = renameMap.get(node.name);
+            return;
+        }
+
+        // Recurse into all children
+        for (const key of Object.keys(node)) {
+            if (key === 'type') continue;
+            const val = node[key];
+            if (Array.isArray(val)) {
+                for (const child of val) {
+                    if (child && typeof child === 'object') {
+                        this.renameVariableRefsInAST(child, renameMap);
+                    }
+                }
+            } else if (val && typeof val === 'object' && val.type) {
+                this.renameVariableRefsInAST(val, renameMap);
+            }
+        }
     }
 
     // Pre-scan AST to collect function parameter names for named-arg resolution.
@@ -204,14 +355,11 @@ export class CodeGenerator {
         this.write('});\n');
     }
 
-    // Rename Identifier nodes in an AST subtree.
-    // Walks the pine2js AST and renames all Identifier references that match
-    // the rename map, stopping at nested FunctionDeclaration boundaries
-    // (which have their own parameter scope).
+    // Rename Identifier nodes in an AST subtree (simple, non-context-aware).
+    // Used for function parameter renaming. Stops at FunctionDeclaration boundaries.
     private renameIdentifiersInAST(node: any, renameMap: Map<string, string>) {
         if (!node || typeof node !== 'object') return;
 
-        // Rename matching Identifier nodes
         if (node.type === 'Identifier' && renameMap.has(node.name)) {
             node.name = renameMap.get(node.name);
             return;
@@ -220,7 +368,6 @@ export class CodeGenerator {
         // Don't recurse into nested function declarations (they have their own scope)
         if (node.type === 'FunctionDeclaration') return;
 
-        // Walk all properties of the node
         for (const key of Object.keys(node)) {
             if (key === 'type') continue;
             const val = node[key];
@@ -346,10 +493,19 @@ export class CodeGenerator {
             if (decl.id.type === 'Identifier') {
                 this.write(decl.id.name);
             } else if (decl.id.type === 'ArrayPattern') {
-                // Tuple destructuring
+                // Tuple destructuring — deduplicate discard placeholders like `_`
+                // Pine Script allows [a, _, _] but JS forbids duplicate names in destructuring
+                const seen = new Set<string>();
                 this.write('[');
                 for (let j = 0; j < decl.id.elements.length; j++) {
-                    this.write(decl.id.elements[j].name);
+                    let name = decl.id.elements[j].name;
+                    if (seen.has(name)) {
+                        const unique = `${name}${this.paramRenameCounter++}`;
+                        decl.id.elements[j].name = unique;
+                        name = unique;
+                    }
+                    seen.add(name);
+                    this.write(name);
                     if (j < decl.id.elements.length - 1) {
                         this.write(', ');
                     }
@@ -724,10 +880,18 @@ export class CodeGenerator {
                 if (decl.id.type === 'Identifier') {
                     this.write(decl.id.name);
                 } else if (decl.id.type === 'ArrayPattern') {
-                    // Destructuring: [a, b]
+                    // Destructuring: [a, b] — deduplicate discard placeholders
+                    const seen = new Set<string>();
                     this.write('[');
                     for (let i = 0; i < decl.id.elements.length; i++) {
-                        this.write(decl.id.elements[i].name);
+                        let name = decl.id.elements[i].name;
+                        if (seen.has(name)) {
+                            const unique = `${name}${this.paramRenameCounter++}`;
+                            decl.id.elements[i].name = unique;
+                            name = unique;
+                        }
+                        seen.add(name);
+                        this.write(name);
                         if (i < decl.id.elements.length - 1) {
                             this.write(', ');
                         }

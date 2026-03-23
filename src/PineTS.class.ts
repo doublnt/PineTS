@@ -94,6 +94,19 @@ export class PineTS {
         this._maxLoops = maxLoops;
     }
 
+    private _alertMode: 'realtime' | 'all' = 'realtime';
+
+    /**
+     * Set alert mode.
+     * - 'realtime' (default): alerts only fire on the last (realtime) bar,
+     *   matching TradingView behavior.
+     * - 'all': alerts fire on every bar, useful for backtesting alert strategies.
+     * @param mode Alert firing mode
+     */
+    public setAlertMode(mode: 'realtime' | 'all') {
+        this._alertMode = mode;
+    }
+
     constructor(
         private source: IProvider | any[],
         private tickerId?: string,
@@ -233,7 +246,7 @@ export class PineTS {
     public stream(
         pineTSCode: Indicator | Function | String,
         options: { pageSize?: number; live?: boolean; interval?: number } = {},
-    ): { on: (event: 'data' | 'error', callback: Function) => void; stop: () => void } {
+    ): { on: (event: 'data' | 'error' | 'warning' | 'alert', callback: Function) => void; stop: () => void } {
         const { live = true, interval = 1000 } = options;
         const pageSize = options.pageSize || this.data.length; // Default pageSize to full data if not provided
 
@@ -247,7 +260,7 @@ export class PineTS {
             code = pineTSCode;
         }
 
-        const listeners: { [key: string]: Function[] } = { data: [], error: [] };
+        const listeners: { [key: string]: Function[] } = { data: [], error: [], warning: [], alert: [] };
         let stopped = false;
 
         const emit = (event: string, ...args: any[]) => {
@@ -256,7 +269,7 @@ export class PineTS {
             }
         };
 
-        const on = (event: 'data' | 'error', callback: Function) => {
+        const on = (event: 'data' | 'error' | 'warning' | 'alert', callback: Function) => {
             if (!listeners[event]) listeners[event] = [];
             listeners[event].push(callback);
         };
@@ -289,6 +302,24 @@ export class PineTS {
                     }
 
                     emit('data', ctx);
+
+                    // Emit any NEW runtime warnings accumulated since last tick
+                    if (ctx.warnings && ctx.warnings.length > 0) {
+                        for (const w of ctx.warnings) {
+                            emit('warning', w);
+                        }
+                        // Clear so next tick only emits newly added warnings
+                        ctx.warnings.length = 0;
+                    }
+
+                    // Emit any NEW alert events accumulated since last tick
+                    if (ctx.alerts && ctx.alerts.length > 0) {
+                        for (const a of ctx.alerts) {
+                            emit('alert', a);
+                        }
+                        // Clear so next tick only emits newly added alerts
+                        ctx.alerts.length = 0;
+                    }
 
                     // If live streaming is enabled, wait for the interval before fetching next data
                     // This prevents hammering the API when new data is available immediately or in rapid succession
@@ -465,6 +496,12 @@ export class PineTS {
 
         // Copy plots metadata
         pageContext.plots = { ...fullContext.plots };
+
+        // Copy runtime warnings
+        pageContext.warnings = fullContext.warnings;
+
+        // Copy alert events
+        pageContext.alerts = fullContext.alerts;
 
         return pageContext;
     }
@@ -661,6 +698,7 @@ export class PineTS {
         }
 
         context.__maxLoops = this._maxLoops;
+        context._alertMode = this._alertMode;
 
         context.pineTSCode = pineTSCode;
         context.isSecondaryContext = isSecondary; // Set secondary context flag
@@ -699,6 +737,7 @@ export class PineTS {
 
         for (let i = startIdx; i < endIdx; i++) {
             context.idx = i;
+            context._execTick = (context._execTick || 0) + 1;
 
             context.data.close.data.push(this.close[i]);
             context.data.open.data.push(this.open[i]);

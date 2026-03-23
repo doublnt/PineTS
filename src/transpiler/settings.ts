@@ -10,6 +10,7 @@ export const NAMESPACES_LIKE = [
     'label',
     'line',
     'na',
+    'alert',
     'time',
     'time_close',
     'dayofmonth',
@@ -39,6 +40,21 @@ export const FACTORY_METHODS = [
     'table.new',
     'linefill.new',
 ];
+
+// Names that function as namespaces — used as function calls (fill(...), plot(...))
+// or member access (size.tiny, label.style_label_down). User variables with these
+// names must be renamed during codegen to avoid shadowing the namespace binding
+// injected by InjectionTransformer. Excludes pure built-in variables (second, hour,
+// time, na, etc.) which are safely scoped by Phase 2 into $.let.glb1_* without collision.
+export const NAMESPACE_COLLISION_NAMES = new Set([
+    ...KNOWN_NAMESPACES,
+    // NAMESPACES_LIKE that are actual function-call namespaces
+    'fill', 'plot', 'hline', 'label', 'line',
+    // Drawing/enum namespaces with member access
+    'size', 'extend', 'display', 'format', 'location', 'shape', 'text', 'xloc', 'yloc',
+    'linefill', 'polyline', 'box', 'table', 'map', 'matrix', 'chart',
+    'alert', 'barstate', 'syminfo', 'timeframe', 'strategy', 'log', 'str',
+]);
 
 // All known data variables in the context
 export const CONTEXT_DATA_VARS = ['open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'openTime', 'closeTime'];

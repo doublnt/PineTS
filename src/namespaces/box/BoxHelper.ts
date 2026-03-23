@@ -37,7 +37,7 @@ export class BoxHelper {
             this.context.plots['__boxes__'] = {
                 title: '__boxes__',
                 data: [],
-                options: { style: 'drawing_box', overlay: true },
+                options: { style: 'drawing_box', overlay: this.context.indicator?.overlay || false },
             };
         }
     }
