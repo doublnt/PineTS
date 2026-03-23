@@ -19,7 +19,7 @@ export class PolylineHelper {
             this.context.plots['__polylines__'] = {
                 title: '__polylines__',
                 data: [],
-                options: { style: 'drawing_polyline', overlay: true },
+                options: { style: 'drawing_polyline', overlay: this.context.indicator?.overlay || false },
             };
         }
     }

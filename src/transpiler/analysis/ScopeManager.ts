@@ -57,6 +57,7 @@ export class ScopeManager {
     private taCallIdCounter: number = 0;
     private userCallIdCounter: number = 0;
     private plotCallIdCounter: number = 0;
+    private alertCallIdCounter: number = 0;
     private loopGuardCounter: number = 0;
     private hoistingStack: any[][] = [];
     private suppressHoisting: boolean = false;
@@ -96,6 +97,12 @@ export class ScopeManager {
         return {
             type: 'Literal',
             value: `#${this.plotCallIdCounter++}`,
+        };
+    }
+    public getNextAlertCallId(): any {
+        return {
+            type: 'Literal',
+            value: `alert_${this.alertCallIdCounter++}`,
         };
     }
     public getNextLoopGuardName(): string {

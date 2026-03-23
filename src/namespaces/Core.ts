@@ -91,6 +91,96 @@ export class NAHelper {
     }
 }
 
+/**
+ * Alert frequency constants (Pine Script alert.freq_* enum values).
+ */
+export const ALERT_FREQ = {
+    freq_all: 'alert.freq_all',
+    freq_once_per_bar: 'alert.freq_once_per_bar',
+    freq_once_per_bar_close: 'alert.freq_once_per_bar_close',
+};
+
+/**
+ * AlertHelper implements the dual-use `alert` identifier.
+ * - `alert(msg, freq)` → `alert.any(msg, freq, {__callsiteId})` — fires an alert event
+ * - `alert.freq_once_per_bar` → frequency constant
+ *
+ * Each `alert()` call site gets a stable ID (`alert_0`, `alert_1`, ...)
+ * injected by the transpiler at compile time via `__callsiteId`. This ensures
+ * per-callsite frequency gating works correctly even when live bars are
+ * re-executed or when alert() calls are inside conditional branches.
+ */
+export class AlertHelper {
+    /**
+     * Per-callsite, per-bar frequency gating.
+     * Key: `${callsiteId}:${barIdx}`, tracks which (callsite, bar) pairs have fired.
+     */
+    private _firedKeys: Set<string> = new Set();
+
+    /** Fallback counter for PineTS-syntax (non-transpiled) calls without __callsiteId. */
+    private _fallbackCounter: number = 0;
+    private _fallbackLastExecTick: number = -1;
+
+    constructor(private context: any) {}
+
+    // Pine Script alert.freq_* constants
+    get freq_all() { return ALERT_FREQ.freq_all; }
+    get freq_once_per_bar() { return ALERT_FREQ.freq_once_per_bar; }
+    get freq_once_per_bar_close() { return ALERT_FREQ.freq_once_per_bar_close; }
+
+    param(source: any, _index?: number, _id?: string) {
+        return Series.from(source).get(0);
+    }
+
+    any(message: any, freq?: any, opts?: any): void {
+        const msg = Series.from(message).get(0);
+        const f = freq ? Series.from(freq).get(0) : ALERT_FREQ.freq_once_per_bar;
+
+        // Extract callsite ID: from transpiler-injected __callsiteId, or fallback counter
+        let callsiteId: string;
+        if (opts && typeof opts === 'object' && opts.__callsiteId) {
+            callsiteId = opts.__callsiteId;
+        } else {
+            const execTick = this.context._execTick || 0;
+            if (execTick !== this._fallbackLastExecTick) {
+                this._fallbackCounter = 0;
+                this._fallbackLastExecTick = execTick;
+            }
+            callsiteId = `alert_${this._fallbackCounter++}`;
+        }
+
+        const barIdx = this.context.idx;
+        const isRealtime = this.context.pine?.barstate?.isrealtime ?? (barIdx === this.context.length - 1);
+        const alertMode = this.context._alertMode || 'realtime';
+
+        // In realtime mode, skip historical bars (matches TradingView behavior)
+        if (alertMode === 'realtime' && !isRealtime) return;
+
+        // Per-callsite frequency gating
+        const gateKey = `${callsiteId}:${barIdx}`;
+
+        if (f === ALERT_FREQ.freq_once_per_bar) {
+            if (this._firedKeys.has(gateKey)) return;
+            this._firedKeys.add(gateKey);
+        } else if (f === ALERT_FREQ.freq_once_per_bar_close) {
+            const isConfirmed = this.context.pine?.barstate?.isconfirmed ?? true;
+            if (!isConfirmed) return;
+            if (this._firedKeys.has(gateKey)) return;
+            this._firedKeys.add(gateKey);
+        }
+        // freq_all: no gating, fire every call
+
+        this.context.alerts.push({
+            type: 'alert',
+            id: callsiteId,
+            message: msg,
+            freq: f,
+            bar_index: barIdx,
+            time: this.context.data.openTime?.data?.[barIdx] ?? 0,
+        });
+    }
+}
+
 export class Core {
     constructor(private context: any) {}
     private extractPlotOptions(options: PlotCharOptions) {
@@ -132,12 +222,13 @@ export class Core {
     }
 
     na(series: any) {
-        return isNaN(Series.from(series).get(0));
+        const val = Series.from(series).get(0);
+        return val === null || val === undefined || (typeof val === 'number' && isNaN(val));
     }
     nz(series: any, replacement: number = 0) {
         const val = Series.from(series).get(0);
         const rep = Series.from(replacement).get(0);
-        return isNaN(val) ? rep : val;
+        return (val === null || val === undefined || (typeof val === 'number' && isNaN(val))) ? rep : val;
     }
     fixnan(series: any) {
         const _s = Series.from(series);
@@ -150,11 +241,51 @@ export class Core {
         return NaN;
     }
 
-    alertcondition(condition, title, message) {
-        //console.warn('alertcondition called but is currently not implemented', condition, title, message);
-    }
-    alert(...args: any[]) {
-        console.warn('alert called but is currently not implemented', args);
+    private _acCounter: number = 0;
+    private _acLastExecTick: number = -1;
+    /** Per-callsite, per-bar dedup for alertcondition (prevents duplicate fires on live re-execution). */
+    private _acFiredKeys: Set<string> = new Set();
+
+    alertcondition(condition: any, title?: any, message?: any) {
+        const cond = Series.from(condition).get(0);
+
+        const barIdx = this.context.idx;
+
+        // Reset counter each time a bar starts executing (including re-executions).
+        // _execTick is incremented by _executeIterations at the start of each bar run,
+        // so re-executing the same bar produces a new tick and resets the counter to 0.
+        const execTick = this.context._execTick || 0;
+        if (execTick !== this._acLastExecTick) {
+            this._acCounter = 0;
+            this._acLastExecTick = execTick;
+        }
+        const callsiteId = `alertcondition_${this._acCounter++}`;
+
+        if (!cond) return;
+
+        const isRealtime = this.context.pine?.barstate?.isrealtime ?? (barIdx === this.context.length - 1);
+        const alertMode = this.context._alertMode || 'realtime';
+
+        // In realtime mode, skip historical bars (matches TradingView behavior)
+        if (alertMode === 'realtime' && !isRealtime) return;
+
+        // Per-callsite, per-bar dedup — alertcondition fires once per bar per callsite
+        // (prevents duplicate emissions when stream() re-executes the live bar)
+        const gateKey = `${callsiteId}:${barIdx}`;
+        if (this._acFiredKeys.has(gateKey)) return;
+        this._acFiredKeys.add(gateKey);
+
+        const t = title ? Series.from(title).get(0) : '';
+        const m = message ? Series.from(message).get(0) : '';
+
+        this.context.alerts.push({
+            type: 'alertcondition',
+            id: callsiteId,
+            title: t,
+            message: m,
+            bar_index: barIdx,
+            time: this.context.data.openTime?.data?.[barIdx] ?? 0,
+        });
     }
     error(...args: any[]) {
         console.error('error called but is currently not implemented', args);

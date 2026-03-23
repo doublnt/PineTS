@@ -1179,7 +1179,8 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                 node.argument.type === 'BinaryExpression' ||
                 node.argument.type === 'LogicalExpression' ||
                 node.argument.type === 'ConditionalExpression' ||
-                node.argument.type === 'CallExpression'
+                node.argument.type === 'CallExpression' ||
+                node.argument.type === 'UnaryExpression'
             ) {
                 // For complex expressions, walk the AST and transform all identifiers and expressions
                 walk.recursive(node.argument, scopeManager, {

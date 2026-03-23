@@ -51,7 +51,7 @@ const FILL_SIGNATURE = [
 
 //prettier-ignore
 const PLOT_ARGS_TYPES = {
-    series: 'series', title: 'string', color: 'series', linewidth: 'number',
+    series: 'series', title: 'string', color: 'color', linewidth: 'number',
     style: 'string', trackprice: 'boolean', histbase: 'number', offset: 'number',
     join: 'bool', editable: 'boolean', show_last: 'number', display: 'string',
     format: 'string', precision: 'number', force_overlay: 'boolean',
@@ -221,6 +221,10 @@ export class PlotHelper {
         const options = this.extractPlotOptions(others);
         const plotKey = this._resolvePlotKey(title, callsiteId);
 
+        // Check if user explicitly passed a color argument (even if it's na/null).
+        // After extractPlotOptions, null color becomes null (not undefined).
+        const hasExplicitColor = 'color' in others;
+
         if (!this.context.plots[plotKey]) {
             const overlay = options.force_overlay ?? (this.context?.indicator?.overlay || false);
             this.context.plots[plotKey] = { data: [], options: { ...options, overlay }, title, _plotKey: plotKey, _callsiteId: callsiteId };
@@ -228,13 +232,12 @@ export class PlotHelper {
 
         const value = Series.from(series).get(0);
 
-        // Always set an explicit color on every point so QFChart can unambiguously
-        // distinguish "use this color" from "hide this segment":
+        // Set per-point color for QFChart:
         //   - User didn't pass color  → use Pine Script default #2962ff
         //   - User passed a color string → use that value (e.g. '#089981')
-        //   - User passed color = na  → undefined (Pine na → NaN; QFChart hides the segment)
+        //   - User passed color = na  → undefined (QFChart hides the segment)
         const rawColor = options.color;
-        const pointColor = 'color' in others
+        const pointColor = hasExplicitColor
             ? (typeof rawColor === 'string' ? rawColor : undefined)
             : (rawColor || '#2962ff');
         const pointOptions: any = { color: pointColor };
@@ -445,18 +448,24 @@ export class FillHelper {
 
         // Detect gradient fill: fill(plot1, plot2, top_value, bottom_value, top_color, bottom_color, ...)
         // vs simple fill:       fill(plot1, plot2, color, title, ...)
-        // The 3rd positional arg (index 2) is a number (top_value) for gradient fills,
-        // but a color string for simple fills.
-        const isGradientFill = args.length >= 6 && typeof args[2] === 'number';
+        // Positional form: 3rd arg (index 2) is a number (top_value).
+        // Named form: transpiler may bundle named args into an object at index 2
+        // containing top_value, bottom_value, top_color, bottom_color.
+        const isGradientPositional = args.length >= 6 && typeof args[2] === 'number';
+        const namedArgs = !isGradientPositional && args.length >= 3 && args[2] !== null
+            && typeof args[2] === 'object' && 'top_value' in args[2] ? args[2] : null;
+        const isGradientFill = isGradientPositional || namedArgs !== null;
 
         if (isGradientFill) {
             const plot1 = args[0];
             const plot2 = args[1];
-            const top_value = args[2];
-            const bottom_value = args[3];
-            const top_color = args[4];
-            const bottom_color = args[5];
-            const title = args.length > 6 && typeof args[6] === 'string' ? args[6] : undefined;
+            const top_value = namedArgs ? Series.from(namedArgs.top_value).get(0) : args[2];
+            const bottom_value = namedArgs ? Series.from(namedArgs.bottom_value).get(0) : args[3];
+            const top_color = namedArgs ? Series.from(namedArgs.top_color).get(0) : args[4];
+            const bottom_color = namedArgs ? Series.from(namedArgs.bottom_color).get(0) : args[5];
+            const title = namedArgs
+                ? (namedArgs.title || undefined)
+                : (args.length > 6 && typeof args[6] === 'string' ? args[6] : undefined);
 
             const p1Key = plot1?._plotKey || plot1?.title;
             const p2Key = plot2?._plotKey || plot2?.title;

@@ -6,7 +6,7 @@ import { PineArray } from './namespaces/array/array.index';
 import { PineMap } from './namespaces/map/map.index';
 import { PineMatrix } from './namespaces/matrix/matrix.index';
 import { Barstate } from './namespaces/Barstate';
-import { Core, NAHelper } from './namespaces/Core';
+import { Core, NAHelper, AlertHelper } from './namespaces/Core';
 import { PineColor } from './namespaces/color/PineColor';
 import { TimeHelper, TimeComponentHelper, EXTRACTORS, getDatePartsInTimezone } from './namespaces/Time';
 import { Input } from './namespaces/input/input.index';
@@ -51,6 +51,24 @@ export class Context {
 
     public __maxLoops: number = 500000;
     public NA: any = NaN;
+
+    /** Runtime warnings (OOB access, etc.) — non-blocking, script continues. */
+    public warnings: { message: string; method?: string; bar: number }[] = [];
+
+    /** Alert events emitted by alert() and alertcondition() calls. */
+    public alerts: { type: string; id: string; message: string; title?: string; freq?: string; bar_index: number; time: number }[] = [];
+
+    /** Alert mode: 'realtime' = only fire on live bars (TV behavior), 'all' = fire on every bar (backtest). */
+    public _alertMode: 'realtime' | 'all' = 'realtime';
+
+    /** Monotonically increasing counter, incremented each time a bar starts executing.
+     *  Used by alertcondition/AlertHelper to detect re-execution of the same bar. */
+    public _execTick: number = 0;
+
+    /** Emit a runtime warning. The script continues execution (returns na/no-op). */
+    public warn(message: string, method?: string): void {
+        this.warnings.push({ message, method, bar: this.idx });
+    }
 
     public lang: any;
     public length: number = 0;
@@ -150,7 +168,7 @@ export class Context {
             indicator: core.indicator.bind(core),
             fixnan: core.fixnan.bind(core),
             alertcondition: core.alertcondition.bind(core),
-            alert: core.alert.bind(core),
+            alert: new AlertHelper(this),
             error: core.error.bind(core),
             max_bars_back: core.max_bars_back.bind(core),
             timestamp: core.timestamp.bind(core),
